@@ -446,15 +446,18 @@ export async function radioPullEvents(
     (r) => r.ok,
   );
 
-  if (anyOk && events.length > 0) {
-    setLastSuccess("radio", events);
+  if (anyOk) {
+    // Successful fetch (even if every endpoint returned an empty array) is
+    // still "live" — never silently fall back to mock data on a healthy
+    // endpoint. We only cache when there is at least one event.
+    if (events.length > 0) setLastSuccess("radio", events);
     return {
       mode: "live",
       events,
       stale: false,
       lastSuccessAt: new Date().toISOString(),
       metricsSuppressed: false,
-      note: null,
+      note: events.length === 0 ? "Radio reachable but returned no events" : null,
     };
   }
 
@@ -552,19 +555,23 @@ export async function observatoryPullEvents(): Promise<AdapterPullOut> {
   if (r.ok) {
     const parsed = safeJson(r.body);
     const { events, metricsSuppressed } = observatoryEventsFromState(parsed);
+    // Successful fetch is "live" even when no events are derived. Never
+    // silently fall back to mock on a healthy endpoint.
     if (events.length > 0) {
       setLastSuccess("observatory", events, { metricsSuppressed });
-      return {
-        mode: "live",
-        events,
-        stale: false,
-        lastSuccessAt: new Date().toISOString(),
-        metricsSuppressed,
-        note: metricsSuppressed
-          ? "Observatory online but reporting all-zero consciousness metrics"
-          : null,
-      };
     }
+    return {
+      mode: "live",
+      events,
+      stale: false,
+      lastSuccessAt: new Date().toISOString(),
+      metricsSuppressed,
+      note: metricsSuppressed
+        ? "Observatory online but reporting all-zero consciousness metrics"
+        : events.length === 0
+          ? "Observatory reachable but returned no events"
+          : null,
+    };
   }
   const cached = getLastSuccess("observatory");
   if (cached && isCacheUsable(cached.fetchedAt)) {
