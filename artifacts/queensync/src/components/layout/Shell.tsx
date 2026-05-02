@@ -11,6 +11,7 @@ import {
   Activity,
   LogOut,
   Shield,
+  ShieldAlert,
   Eye,
   Tv,
 } from "lucide-react";
@@ -36,6 +37,7 @@ const NAV_ITEMS = [
   { href: "/resonance", label: "Resonance", icon: AudioWaveform },
   { href: "/adapters", label: "Adapters", icon: Activity },
   { href: "/hologram", label: "Hologram TV", icon: Tv },
+  { href: "/operations", label: "Operations", icon: ShieldAlert },
   { href: "/logs", label: "Logs", icon: Terminal },
 ];
 

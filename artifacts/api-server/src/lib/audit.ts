@@ -1,4 +1,5 @@
 import type { Request } from "express";
+import { getRequestAuth } from "./auth";
 
 export interface AuditContext {
   ip: string;
@@ -16,6 +17,10 @@ function clientIp(req: Request): string {
 }
 
 function detectActor(req: Request): string {
+  const authCtx = getRequestAuth(req);
+  if (authCtx?.role) {
+    return `${authCtx.role}:${authCtx.source}`;
+  }
   const auth = req.header("authorization");
   if (auth?.startsWith("Bearer ")) {
     const token = auth.slice(7).trim();

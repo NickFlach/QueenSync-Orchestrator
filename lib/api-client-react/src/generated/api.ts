@@ -38,6 +38,9 @@ import type {
   ObservatoryConfig,
   ObservatoryState,
   OnboardArmBody,
+  PrivilegedDispatch,
+  PrivilegedDispatchRecentStats,
+  PrivilegedDispatchRecentStatsParams,
   ResolveResonanceBody,
   Resonance,
   RespondResonanceBody,
@@ -1462,6 +1465,205 @@ export function useListLogs<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListLogsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Audit feed of privileged (oracle-admin) dispatches. Returns the most
+recent N tasks whose required capability is in the oracle-admin set,
+enriched with the operator/actor that triggered them when known.
+
+ */
+export const getListPrivilegedDispatchesUrl = () => {
+  return `/api/logs/privileged-dispatches`;
+};
+
+export const listPrivilegedDispatches = async (
+  options?: RequestInit,
+): Promise<PrivilegedDispatch[]> => {
+  return customFetch<PrivilegedDispatch[]>(getListPrivilegedDispatchesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListPrivilegedDispatchesQueryKey = () => {
+  return [`/api/logs/privileged-dispatches`] as const;
+};
+
+export const getListPrivilegedDispatchesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPrivilegedDispatches>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPrivilegedDispatches>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListPrivilegedDispatchesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listPrivilegedDispatches>>
+  > = ({ signal }) => listPrivilegedDispatches({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPrivilegedDispatches>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListPrivilegedDispatchesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPrivilegedDispatches>>
+>;
+export type ListPrivilegedDispatchesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Audit feed of privileged (oracle-admin) dispatches. Returns the most
+recent N tasks whose required capability is in the oracle-admin set,
+enriched with the operator/actor that triggered them when known.
+
+ */
+
+export function useListPrivilegedDispatches<
+  TData = Awaited<ReturnType<typeof listPrivilegedDispatches>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPrivilegedDispatches>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPrivilegedDispatchesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Server-side aggregate counts of privileged dispatches inside a recent
+time window (default 1 hour). Used by the Operations header so the
+succeeded/failed/in-flight badges stay accurate independent of the
+list endpoint's row limit.
+
+ */
+export const getPrivilegedDispatchRecentStatsUrl = (
+  params?: PrivilegedDispatchRecentStatsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/logs/privileged-dispatches/recent-stats?${stringifiedParams}`
+    : `/api/logs/privileged-dispatches/recent-stats`;
+};
+
+export const privilegedDispatchRecentStats = async (
+  params?: PrivilegedDispatchRecentStatsParams,
+  options?: RequestInit,
+): Promise<PrivilegedDispatchRecentStats> => {
+  return customFetch<PrivilegedDispatchRecentStats>(
+    getPrivilegedDispatchRecentStatsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getPrivilegedDispatchRecentStatsQueryKey = (
+  params?: PrivilegedDispatchRecentStatsParams,
+) => {
+  return [
+    `/api/logs/privileged-dispatches/recent-stats`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getPrivilegedDispatchRecentStatsQueryOptions = <
+  TData = Awaited<ReturnType<typeof privilegedDispatchRecentStats>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: PrivilegedDispatchRecentStatsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof privilegedDispatchRecentStats>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getPrivilegedDispatchRecentStatsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof privilegedDispatchRecentStats>>
+  > = ({ signal }) =>
+    privilegedDispatchRecentStats(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof privilegedDispatchRecentStats>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type PrivilegedDispatchRecentStatsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof privilegedDispatchRecentStats>>
+>;
+export type PrivilegedDispatchRecentStatsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Server-side aggregate counts of privileged dispatches inside a recent
+time window (default 1 hour). Used by the Operations header so the
+succeeded/failed/in-flight badges stay accurate independent of the
+list endpoint's row limit.
+
+ */
+
+export function usePrivilegedDispatchRecentStats<
+  TData = Awaited<ReturnType<typeof privilegedDispatchRecentStats>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: PrivilegedDispatchRecentStatsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof privilegedDispatchRecentStats>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getPrivilegedDispatchRecentStatsQueryOptions(
+    params,
+    options,
+  );
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

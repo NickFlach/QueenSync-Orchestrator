@@ -20,6 +20,7 @@ import ResonanceFields from "@/pages/resonance";
 import Adapters from "@/pages/adapters";
 import Hologram from "@/pages/hologram";
 import ExecutionLog from "@/pages/logs";
+import Operations from "@/pages/operations";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { LoginScreen } from "@/components/login-screen";
 
@@ -70,6 +71,7 @@ function Router() {
         <Route path="/resonance" component={ResonanceFields} />
         <Route path="/adapters" component={Adapters} />
         <Route path="/hologram" component={Hologram} />
+        <Route path="/operations" component={Operations} />
         <Route path="/logs" component={ExecutionLog} />
         <Route component={NotFound} />
       </Switch>

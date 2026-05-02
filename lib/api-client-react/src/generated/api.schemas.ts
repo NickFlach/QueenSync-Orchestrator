@@ -481,6 +481,70 @@ event-specific keys (taskIds, resonanceIds, decision, etc.).
   createdAt: string;
 }
 
+export type PrivilegedDispatchRequiredCapability =
+  (typeof PrivilegedDispatchRequiredCapability)[keyof typeof PrivilegedDispatchRequiredCapability];
+
+export const PrivilegedDispatchRequiredCapability = {
+  restart_radio: "restart_radio",
+  restart_observatory: "restart_observatory",
+  trigger_oration_now: "trigger_oration_now",
+  setOverride: "setOverride",
+  dream_trigger: "dream_trigger",
+  kannaka_status: "kannaka_status",
+} as const;
+
+export type PrivilegedDispatchStatus =
+  (typeof PrivilegedDispatchStatus)[keyof typeof PrivilegedDispatchStatus];
+
+export const PrivilegedDispatchStatus = {
+  pending: "pending",
+  active: "active",
+  completed: "completed",
+  failed: "failed",
+} as const;
+
+export type PrivilegedDispatchContext = { [key: string]: unknown };
+
+export interface PrivilegedDispatch {
+  id: string;
+  intent: string;
+  requiredCapability: PrivilegedDispatchRequiredCapability;
+  priority: number;
+  source: string;
+  status: PrivilegedDispatchStatus;
+  /** @nullable */
+  assignedArmId?: string | null;
+  /** @nullable */
+  result?: string | null;
+  /** @nullable */
+  error?: string | null;
+  /**
+   * Identity that triggered the dispatch (from the task_created log
+entry's audit metadata). Null for tasks created before audit
+metadata existed, or tasks created in fully-open demo mode.
+
+   * @nullable
+   */
+  actor?: string | null;
+  /** @nullable */
+  ip?: string | null;
+  /** @nullable */
+  trigger?: string | null;
+  context?: PrivilegedDispatchContext;
+  retryCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PrivilegedDispatchRecentStats {
+  /** Width of the rolling window in milliseconds. */
+  windowMs: number;
+  succeeded: number;
+  failed: number;
+  /** Pending or active privileged dispatches inside the window. */
+  inFlight: number;
+}
+
 export type AdapterHealthMode =
   (typeof AdapterHealthMode)[keyof typeof AdapterHealthMode];
 
@@ -699,4 +763,12 @@ export interface ObservatoryConfig {
 export type ListMemoryParams = {
   includeCompacted?: boolean;
   includeRejected?: boolean;
+};
+
+export type PrivilegedDispatchRecentStatsParams = {
+  /**
+   * @minimum 1
+   * @maximum 86400000
+   */
+  windowMs?: number;
 };

@@ -543,6 +543,74 @@ export const ListLogsResponseItem = zod.object({
 });
 export const ListLogsResponse = zod.array(ListLogsResponseItem);
 
+/**
+ * @summary Audit feed of privileged (oracle-admin) dispatches. Returns the most
+recent N tasks whose required capability is in the oracle-admin set,
+enriched with the operator/actor that triggered them when known.
+
+ */
+export const ListPrivilegedDispatchesResponseItem = zod.object({
+  id: zod.string(),
+  intent: zod.string(),
+  requiredCapability: zod.enum([
+    "restart_radio",
+    "restart_observatory",
+    "trigger_oration_now",
+    "setOverride",
+    "dream_trigger",
+    "kannaka_status",
+  ]),
+  priority: zod.number(),
+  source: zod.string(),
+  status: zod.enum(["pending", "active", "completed", "failed"]),
+  assignedArmId: zod.string().nullish(),
+  result: zod.string().nullish(),
+  error: zod.string().nullish(),
+  actor: zod
+    .string()
+    .nullish()
+    .describe(
+      "Identity that triggered the dispatch (from the task_created log\nentry's audit metadata). Null for tasks created before audit\nmetadata existed, or tasks created in fully-open demo mode.\n",
+    ),
+  ip: zod.string().nullish(),
+  trigger: zod.string().nullish(),
+  context: zod.record(zod.string(), zod.unknown()).optional(),
+  retryCount: zod.number().optional(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListPrivilegedDispatchesResponse = zod.array(
+  ListPrivilegedDispatchesResponseItem,
+);
+
+/**
+ * @summary Server-side aggregate counts of privileged dispatches inside a recent
+time window (default 1 hour). Used by the Operations header so the
+succeeded/failed/in-flight badges stay accurate independent of the
+list endpoint's row limit.
+
+ */
+export const privilegedDispatchRecentStatsQueryWindowMsMax = 86400000;
+
+export const PrivilegedDispatchRecentStatsQueryParams = zod.object({
+  windowMs: zod.coerce
+    .number()
+    .min(1)
+    .max(privilegedDispatchRecentStatsQueryWindowMsMax)
+    .optional(),
+});
+
+export const PrivilegedDispatchRecentStatsResponse = zod.object({
+  windowMs: zod
+    .number()
+    .describe("Width of the rolling window in milliseconds."),
+  succeeded: zod.number(),
+  failed: zod.number(),
+  inFlight: zod
+    .number()
+    .describe("Pending or active privileged dispatches inside the window."),
+});
+
 export const RadioAdapterHealthResponse = zod.object({
   name: zod.string(),
   baseUrl: zod.string(),

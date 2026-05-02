@@ -305,6 +305,44 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/LogEntry" }
 
+  /logs/privileged-dispatches:
+    get:
+      operationId: listPrivilegedDispatches
+      tags: [logs]
+      summary: |
+        Audit feed of privileged (oracle-admin) dispatches. Returns the most
+        recent N tasks whose required capability is in the oracle-admin set,
+        enriched with the operator/actor that triggered them when known.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PrivilegedDispatch" }
+
+  /logs/privileged-dispatches/recent-stats:
+    get:
+      operationId: privilegedDispatchRecentStats
+      tags: [logs]
+      summary: |
+        Server-side aggregate counts of privileged dispatches inside a recent
+        time window (default 1 hour). Used by the Operations header so the
+        succeeded/failed/in-flight badges stay accurate independent of the
+        list endpoint's row limit.
+      parameters:
+        - in: query
+          name: windowMs
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 86400000 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PrivilegedDispatchRecentStats" }
+
   /adapters/radio/health:
     get:
       operationId: radioAdapterHealth
@@ -912,6 +950,67 @@ components:
             event-specific keys (taskIds, resonanceIds, decision, etc.).
           additionalProperties: true
         createdAt: { type: string, format: date-time }
+
+    PrivilegedDispatch:
+      type: object
+      required:
+        [
+          id,
+          intent,
+          requiredCapability,
+          status,
+          source,
+          priority,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string }
+        intent: { type: string }
+        requiredCapability:
+          type: string
+          enum:
+            - restart_radio
+            - restart_observatory
+            - trigger_oration_now
+            - setOverride
+            - dream_trigger
+            - kannaka_status
+        priority: { type: integer }
+        source: { type: string }
+        status:
+          type: string
+          enum: [pending, active, completed, failed]
+        assignedArmId: { type: ["string", "null"] }
+        result: { type: ["string", "null"] }
+        error: { type: ["string", "null"] }
+        actor:
+          type: ["string", "null"]
+          description: |
+            Identity that triggered the dispatch (from the task_created log
+            entry's audit metadata). Null for tasks created before audit
+            metadata existed, or tasks created in fully-open demo mode.
+        ip: { type: ["string", "null"] }
+        trigger: { type: ["string", "null"] }
+        context:
+          type: object
+          additionalProperties: true
+        retryCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    PrivilegedDispatchRecentStats:
+      type: object
+      required: [windowMs, succeeded, failed, inFlight]
+      properties:
+        windowMs:
+          type: integer
+          description: Width of the rolling window in milliseconds.
+        succeeded: { type: integer }
+        failed: { type: integer }
+        inFlight:
+          type: integer
+          description: Pending or active privileged dispatches inside the window.
 
     AdapterHealth:
       type: object
