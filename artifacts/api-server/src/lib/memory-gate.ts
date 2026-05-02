@@ -131,7 +131,7 @@ export async function evaluateMemory(
     summary: `Memory approved (${tag}, importance ${importance.toFixed(2)})`,
     metadata: { id: row.id, tag, importance },
   });
-  broadcast({ kind: "memory", data: row });
+  broadcast({ type: "memory_event", data: row });
 
   return { decision, importance, event: row };
 }

@@ -9,6 +9,6 @@ export async function recordLog(entry: LogInput) {
     .insert(logsTable)
     .values({ id: nanoid(12), ...entry })
     .returning();
-  broadcast({ kind: "log", data: row });
+  broadcast({ type: "log_event", data: row });
   return row;
 }

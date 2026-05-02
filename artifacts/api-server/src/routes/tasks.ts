@@ -43,7 +43,7 @@ router.post("/tasks", async (req, res): Promise<void> => {
     summary: `Task created: ${row.intent}`,
     metadata: { taskId: row.id },
   });
-  broadcast({ kind: "task", data: row });
+  broadcast({ type: "task_created", data: row });
   const dispatched = await dispatchTask(row);
   res.status(201).json(dispatched);
 });
@@ -82,6 +82,7 @@ router.post("/tasks/:id/retry", async (req, res): Promise<void> => {
     })
     .where(eq(tasksTable.id, id))
     .returning();
+  broadcast({ type: "task_updated", data: reset });
   const dispatched = await dispatchTask(reset);
   res.json(dispatched);
 });
@@ -116,6 +117,10 @@ router.post("/tasks/:id/callback", async (req, res): Promise<void> => {
       .update(armsTable)
       .set({ status: "idle", lastHeartbeat: new Date() })
       .where(eq(armsTable.id, task.assignedArmId));
+    broadcast({
+      type: "arms_updated",
+      data: { armId: task.assignedArmId, status: "idle" },
+    });
   }
   await recordLog({
     eventType: body.status === "completed" ? "task_completed" : "task_failed",
@@ -126,7 +131,10 @@ router.post("/tasks/:id/callback", async (req, res): Promise<void> => {
         : `Task ${id} failed via callback: ${body.error ?? ""}`,
     metadata: { taskId: id },
   });
-  broadcast({ kind: "task", data: updated });
+  broadcast({
+    type: body.status === "completed" ? "task_completed" : "task_failed",
+    data: updated,
+  });
   if (body.status === "completed" && body.result) {
     await evaluateMemory({
       type: "agent_output",

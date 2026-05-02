@@ -1,6 +1,5 @@
 import { Router, type IRouter } from "express";
 import { nanoid } from "nanoid";
-import { eq } from "drizzle-orm";
 import {
   db,
   resonanceFieldsTable,
@@ -57,7 +56,7 @@ router.post("/resonance", async (req, res): Promise<void> => {
     summary: `Resonance field opened: ${body.intent}`,
     metadata: { resonanceId: field.id, tags: body.tags },
   });
-  broadcast({ kind: "resonance", data: { ...field, responses: [] } });
+  broadcast({ type: "resonance_created", data: { ...field, responses: [] } });
   void autoLocalResonance(field);
   const full = await loadResonance(field.id);
   res.status(201).json(full);
@@ -92,8 +91,10 @@ router.post("/resonance/:id/respond", async (req, res): Promise<void> => {
     summary: `Manual response from ${body.agentId} (${body.score.toFixed(2)})`,
     metadata: { resonanceId: id, responseId: response.id },
   });
-  broadcast({ kind: "resonance_response", data: response });
-  res.json(await loadResonance(id));
+  broadcast({ type: "resonance_response", data: response });
+  const updated = await loadResonance(id);
+  if (updated) broadcast({ type: "resonance_updated", data: updated });
+  res.json(updated);
 });
 
 router.post("/resonance/:id/resolve", async (req, res): Promise<void> => {

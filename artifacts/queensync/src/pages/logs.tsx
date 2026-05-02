@@ -1,9 +1,15 @@
-import { useListLogs, LogEntry } from "@workspace/api-client-react";
+import {
+  useListLogs,
+  LogEntry,
+  getListLogsQueryKey,
+} from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Terminal } from "lucide-react";
 
 export default function ExecutionLog() {
-  const { data: logs, isLoading } = useListLogs({ query: { refetchInterval: 3000, queryKey: undefined as never } });
+  const { data: logs, isLoading } = useListLogs({
+    query: { refetchInterval: 3000, queryKey: getListLogsQueryKey() },
+  });
 
   if (isLoading) {
     return <div className="p-6 space-y-4"><Skeleton className="h-12 w-64 bg-card" /><Skeleton className="h-64 w-full bg-card" /></div>;

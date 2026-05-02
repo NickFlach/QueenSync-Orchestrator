@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   db,
   armsTable,
@@ -93,8 +93,10 @@ export async function autoLocalResonance(field: ResonanceField) {
       summary: `${arm.name} responded to ${field.id} (score ${score.toFixed(2)})`,
       metadata: { resonanceId: field.id, armId: arm.id, score },
     });
-    broadcast({ kind: "resonance_response", data: response });
+    broadcast({ type: "resonance_response", data: response });
   }
+  const updated = await loadResonance(field.id);
+  if (updated) broadcast({ type: "resonance_updated", data: updated });
 }
 
 export async function resolveField(
@@ -109,7 +111,9 @@ export async function resolveField(
       .set({ status: "expired" })
       .where(eq(resonanceFieldsTable.id, id))
       .returning();
-    return { ...updated, responses: [] };
+    const expired = { ...updated, responses: [] };
+    broadcast({ type: "resonance_resolved", data: expired });
+    return expired;
   }
 
   const sorted = [...field.responses].sort((a, b) => b.score - a.score);
@@ -157,8 +161,9 @@ export async function resolveField(
     .select()
     .from(resonanceResponsesTable)
     .where(eq(resonanceResponsesTable.resonanceId, id));
-  broadcast({ kind: "resonance", data: { ...updated, responses } });
-  return { ...updated, responses };
+  const result = { ...updated, responses };
+  broadcast({ type: "resonance_resolved", data: result });
+  return result;
 }
 
 export async function expireOldResonance() {

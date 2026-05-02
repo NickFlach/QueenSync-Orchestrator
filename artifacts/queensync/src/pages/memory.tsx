@@ -1,11 +1,17 @@
-import { useListMemory, MemoryEvent } from "@workspace/api-client-react";
+import {
+  useListMemory,
+  MemoryEvent,
+  getListMemoryQueryKey,
+} from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BrainCircuit } from "lucide-react";
 
 export default function MemoryGate() {
-  const { data: memory, isLoading } = useListMemory({ query: { refetchInterval: 5000, queryKey: undefined as never } });
+  const { data: memory, isLoading } = useListMemory({
+    query: { refetchInterval: 5000, queryKey: getListMemoryQueryKey() },
+  });
 
   if (isLoading) {
     return <div className="p-6 space-y-4"><Skeleton className="h-12 w-64 bg-card" /><Skeleton className="h-24 w-full bg-card" /></div>;

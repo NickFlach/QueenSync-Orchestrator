@@ -51,7 +51,8 @@ router.post("/arms", async (req, res): Promise<void> => {
     summary: `Arm ${row.name} registered (${row.type})`,
     metadata: { armId: row.id, capabilities: row.capabilities },
   });
-  broadcast({ kind: "arm", data: row });
+  broadcast({ type: "arm_registered", data: row });
+  broadcast({ type: "arms_updated", data: { armId: row.id, status: "idle" } });
   res.status(201).json(row);
 });
 
@@ -95,6 +96,8 @@ router.delete("/arms/:id", async (req, res): Promise<void> => {
     summary: `Arm ${removed.name} removed`,
     metadata: { armId: id },
   });
+  broadcast({ type: "arm_removed", data: { armId: id, name: removed.name } });
+  broadcast({ type: "arms_updated", data: { armId: id, status: "removed" } });
   res.sendStatus(204);
 });
 
@@ -118,7 +121,7 @@ router.post("/arms/:id/heartbeat", async (req, res): Promise<void> => {
     summary: `Heartbeat from ${updated.name}`,
     metadata: { armId: id },
   });
-  broadcast({ kind: "arm", data: updated });
+  broadcast({ type: "arms_updated", data: { armId: id, status: "idle" } });
   res.json(updated);
 });
 

@@ -41,9 +41,8 @@ router.post("/signals", async (req, res): Promise<void> => {
     summary: `Signal received: ${body.type}`,
     metadata: { signalId: signal.id, type: body.type },
   });
-  broadcast({ kind: "signal", data: signal });
+  broadcast({ type: "signal_received", data: signal });
 
-  // Convert signal -> task or resonance based on type
   if (body.type === "build_request") {
     const summary =
       typeof body.payload?.summary === "string"
@@ -75,6 +74,7 @@ router.post("/signals", async (req, res): Promise<void> => {
       summary: `Task derived from signal ${signal.id}`,
       metadata: { taskId: task.id, signalId: signal.id },
     });
+    broadcast({ type: "task_created", data: task });
     await dispatchTask(task);
   } else if (
     body.type === "memory_anomaly" ||
@@ -110,6 +110,7 @@ router.post("/signals", async (req, res): Promise<void> => {
       summary: `Resonance derived from signal ${signal.id}`,
       metadata: { resonanceId: field.id, signalId: signal.id },
     });
+    broadcast({ type: "resonance_created", data: { ...field, responses: [] } });
     void autoLocalResonance(field);
   }
 

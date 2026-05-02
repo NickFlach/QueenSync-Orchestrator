@@ -1,4 +1,11 @@
-import { useRadioAdapterHealth, useObservatoryAdapterHealth, useRadioAdapterPull, useObservatoryAdapterPull, getRadioAdapterHealthQueryKey, getObservatoryAdapterHealthQueryKey } from "@workspace/api-client-react";
+import {
+  useRadioAdapterHealth,
+  useObservatoryAdapterHealth,
+  useRadioAdapterPull,
+  useObservatoryAdapterPull,
+  getRadioAdapterHealthQueryKey,
+  getObservatoryAdapterHealthQueryKey,
+} from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Activity, Radio, RefreshCw } from "lucide-react";
@@ -6,8 +13,18 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
 export default function Adapters() {
-  const { data: radioHealth } = useRadioAdapterHealth({ query: { refetchInterval: 10000, queryKey: undefined as never } });
-  const { data: obsHealth } = useObservatoryAdapterHealth({ query: { refetchInterval: 10000, queryKey: undefined as never } });
+  const { data: radioHealth } = useRadioAdapterHealth({
+    query: {
+      refetchInterval: 10000,
+      queryKey: getRadioAdapterHealthQueryKey(),
+    },
+  });
+  const { data: obsHealth } = useObservatoryAdapterHealth({
+    query: {
+      refetchInterval: 10000,
+      queryKey: getObservatoryAdapterHealthQueryKey(),
+    },
+  });
   
   const queryClient = useQueryClient();
   const { toast } = useToast();

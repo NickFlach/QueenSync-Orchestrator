@@ -21,20 +21,21 @@ router.post("/demo/wake-kannaktopus", async (_req, res): Promise<void> => {
   const [arm] = await db
     .select()
     .from(armsTable)
-    .where(eq(armsTable.id, "arm-kannaktopus-prime"));
+    .where(eq(armsTable.id, "architect_01"));
   if (arm) {
     await db
       .update(armsTable)
       .set({ status: "idle", lastHeartbeat: new Date() })
       .where(eq(armsTable.id, arm.id));
+    broadcast({ type: "arms_updated", data: { armId: arm.id, status: "idle" } });
   }
   const intents = [
     {
-      intent: "Compose a chord transmission for Radio",
+      intent: "Compose a chord transmission for Signal Keeper",
       capability: "transmit",
     },
-    { intent: "Build a memory snapshot", capability: "build" },
-    { intent: "Dream a short fragment", capability: "dream" },
+    { intent: "Build a memory snapshot for the swarm", capability: "build" },
+    { intent: "Dream a short fragment from today's logs", capability: "dream" },
   ];
   for (const i of intents) {
     const [task] = await db
@@ -50,6 +51,7 @@ router.post("/demo/wake-kannaktopus", async (_req, res): Promise<void> => {
       })
       .returning();
     created.push(task.id);
+    broadcast({ type: "task_created", data: task });
     await dispatchTask(task);
   }
   await recordLog({
@@ -69,20 +71,20 @@ router.post("/demo/dream-lite", async (_req, res): Promise<void> => {
     .limit(20);
   const summary =
     recent.length === 0
-      ? "Dream Lite hums in an empty room — no memories yet."
-      : `Dream Lite compressed ${recent.length} memories: ${recent
+      ? "Memory Keeper hums in an empty room — no memories yet."
+      : `Memory Keeper compressed ${recent.length} memories: ${recent
           .map((m) => m.tag)
           .slice(0, 8)
           .join(", ")}.`;
   const result = await evaluateMemory({
     type: "decision",
     content: summary,
-    agentId: "arm-dream-lite",
+    agentId: "memory_keeper_01",
     metadata: { kind: "dream_lite" },
   });
   await recordLog({
     eventType: "dream_lite",
-    source: "arm-dream-lite",
+    source: "memory_keeper_01",
     summary,
     metadata: { decision: result.decision, importance: result.importance },
   });
@@ -96,8 +98,8 @@ router.post("/demo/resonance-storm", async (_req, res): Promise<void> => {
   const created: string[] = [];
   const intents: Array<{ intent: string; tags: string[] }> = [
     {
-      intent: "Should we transmit a chord to Radio now?",
-      tags: ["transmit", "chord", "kannaka"],
+      intent: "Should we transmit a chord to Signal Keeper now?",
+      tags: ["transmit", "chord", "broadcast"],
     },
     {
       intent: "Compose a dream fragment from today's signals",
@@ -106,6 +108,10 @@ router.post("/demo/resonance-storm", async (_req, res): Promise<void> => {
     {
       intent: "Forge an OpenClaw artifact for the new arm",
       tags: ["artifact", "build", "merge"],
+    },
+    {
+      intent: "Audit the latest anomaly burst",
+      tags: ["audit", "anomaly", "observe"],
     },
   ];
   for (const r of intents) {
@@ -122,14 +128,14 @@ router.post("/demo/resonance-storm", async (_req, res): Promise<void> => {
       })
       .returning();
     created.push(field.id);
-    broadcast({ kind: "resonance", data: { ...field, responses: [] } });
+    broadcast({ type: "resonance_created", data: { ...field, responses: [] } });
     await autoLocalResonance(field);
     setTimeout(() => {
       void resolveField(field.id, "best");
     }, 1500);
   }
   await recordLog({
-    eventType: "resonance_created",
+    eventType: "resonance_storm",
     source: "demo",
     summary: `Resonance Storm — ${created.length} fields opened`,
     metadata: { resonanceIds: created },
