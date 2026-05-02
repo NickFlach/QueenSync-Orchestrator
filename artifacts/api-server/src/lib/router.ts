@@ -12,7 +12,7 @@ import {
   signCallback,
   signOracleAdminBody,
 } from "./auth";
-import { validateOutboundUrl, logBlockedUrl } from "./url-guard";
+import { safeFetch, BlockedUrlError } from "./safe-fetch";
 
 export async function pickArmForCapability(
   requiredCapability: string,
@@ -133,16 +133,6 @@ function callbackUrlFor(taskId: string): string {
 
 async function dispatchExternal(task: Task, arm: Arm) {
   if (!arm.endpointUrl) return;
-  const guard = validateOutboundUrl(arm.endpointUrl);
-  if (!guard.ok) {
-    logBlockedUrl("dispatchExternal", arm.endpointUrl, guard.reason ?? "blocked");
-    await failTask(
-      task,
-      arm,
-      `Refused to dispatch to ${arm.endpointUrl}: ${guard.reason}`,
-    );
-    return;
-  }
   const callbackUrl = callbackUrlFor(task.id);
   const payload = {
     taskId: task.id,
@@ -182,11 +172,14 @@ async function dispatchExternal(task: Task, arm: Arm) {
     }
   }
   try {
-    const r = await fetch(arm.endpointUrl, {
+    // safeFetch validates the URL (SSRF guard) and disables redirect
+    // following — same hardening the heartbeat probe uses.
+    const r = await safeFetch(arm.endpointUrl, {
       method: "POST",
       headers,
       body,
       signal: AbortSignal.timeout(5000),
+      context: `dispatch:${arm.id}`,
     });
     await recordLog({
       eventType: r.ok ? "task_dispatched" : "task_dispatch_failed",
@@ -211,15 +204,20 @@ async function dispatchExternal(task: Task, arm: Arm) {
       }
     }
   } catch (err) {
-    const msg = (err as Error).message;
-    logger.warn({ err, armId: arm.id }, "external dispatch failed");
+    const blocked = err instanceof BlockedUrlError;
+    const msg = blocked
+      ? `Refused to dispatch to ${arm.endpointUrl}: ${(err as BlockedUrlError).reason}`
+      : (err as Error).message;
+    logger.warn({ err, armId: arm.id, blocked }, "external dispatch failed");
     await recordLog({
       eventType: "task_dispatch_failed",
       source: arm.id,
       summary: `Dispatch to ${arm.name} failed: ${msg}`,
-      metadata: { taskId: task.id, armId: arm.id },
+      metadata: { taskId: task.id, armId: arm.id, blocked },
     });
-    if (arm.type === "oracle_admin") {
+    // SSRF-blocked URLs and any privileged-arm transport failure must
+    // never be marked completed via the mock fallback.
+    if (blocked || arm.type === "oracle_admin") {
       await failTask(task, arm, `Dispatch to ${arm.name} failed: ${msg}`);
     } else {
       void mockCallback(task, arm, true);

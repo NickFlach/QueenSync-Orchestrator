@@ -355,14 +355,19 @@ export const ORACLE_ADMIN_TIMESTAMP_HEADER = "x-queensync-timestamp";
 export const ORACLE_ADMIN_SIGNATURE_HEADER = "x-queensync-body-signature";
 
 function getOracleAdminSecret(): string | null {
-  return process.env["QUEENSYNC_ORACLE_ADMIN_HMAC_SECRET"] ?? null;
+  // Treat empty string the same as unset so an exported-but-empty
+  // QUEENSYNC_ORACLE_ADMIN_HMAC_SECRET surfaces the unconfigured warning
+  // (rather than silently signing-as-null and being rejected at the shim).
+  const v = process.env["QUEENSYNC_ORACLE_ADMIN_HMAC_SECRET"];
+  if (v === undefined || v === "") return null;
+  return v;
 }
 
 /**
  * Returns true if HMAC signing is configured for the oracle-admin shim.
- * When false, dispatches to oracle_admin arms still go through unsigned
- * (which the shim will reject in production — operators should configure
- * the secret).
+ * Empty string is treated as unconfigured. When false, dispatches to
+ * oracle_admin arms still go through unsigned (which the shim will reject
+ * in production — operators should configure the secret).
  */
 export function isOracleAdminSigningConfigured(): boolean {
   return getOracleAdminSecret() !== null;
