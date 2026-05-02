@@ -12,6 +12,22 @@ import {
   signCallback,
   signOracleAdminBody,
 } from "./auth";
+import {
+  decryptArmSecret,
+  signCallbackWithArmSecret,
+} from "./credentials";
+
+function signCallbackForArm(
+  arm: Arm,
+  taskId: string,
+  status: string,
+): string | null {
+  if (arm.credentialCipher) {
+    const secret = decryptArmSecret(arm.credentialCipher);
+    if (secret) return signCallbackWithArmSecret(secret, taskId, status);
+  }
+  return signCallback(taskId, status);
+}
 import { safeFetch, BlockedUrlError } from "./safe-fetch";
 
 export async function pickArmForCapability(
@@ -144,11 +160,13 @@ async function dispatchExternal(task: Task, arm: Arm) {
     armId: arm.id,
   };
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  applyArmAuthHeaders(arm.authMethod, headers);
+  applyArmAuthHeaders(arm, headers);
   // Provide HMAC the receiving arm should echo on its callback so we can
-  // accept it via /api/tasks/:id/callback. Successful callback must match.
-  const completedSig = signCallback(task.id, "completed");
-  const failedSig = signCallback(task.id, "failed");
+  // accept it via /api/tasks/:id/callback. When a per-arm credential is
+  // configured, those signatures are produced by the per-arm secret;
+  // otherwise the shared QUEENSYNC_CALLBACK_SECRET is used.
+  const completedSig = signCallbackForArm(arm, task.id, "completed");
+  const failedSig = signCallbackForArm(arm, task.id, "failed");
   if (completedSig && failedSig) {
     headers["X-QueenSync-Completed-Signature"] = completedSig;
     headers["X-QueenSync-Failed-Signature"] = failedSig;

@@ -5,7 +5,9 @@ import type {
   NextFunction,
   RequestHandler,
 } from "express";
+import type { Arm } from "@workspace/db";
 import { logger } from "./logger";
+import { decryptArmSecret, signCallbackWithArmSecret } from "./credentials";
 
 // ---------------------------------------------------------------------------
 // Environment configuration
@@ -20,6 +22,7 @@ const VIEWER_PASSWORD = process.env["QUEENSYNC_VIEWER_PASSWORD"] ?? null;
 const REQUIRE_AUTH_FOR_READS =
   process.env["QUEENSYNC_REQUIRE_AUTH_FOR_READS"] === "1" ||
   process.env["QUEENSYNC_REQUIRE_AUTH_FOR_READS"] === "true";
+const IS_PRODUCTION = process.env["NODE_ENV"] === "production";
 // Read at call time so the secret can be rotated without a restart.
 function getCallbackSecret(): string | null {
   const v = process.env["QUEENSYNC_CALLBACK_SECRET"];
@@ -31,12 +34,23 @@ const AUTH_CONFIGURED = Boolean(
   OPERATOR_TOKEN || VIEWER_TOKEN || OPERATOR_PASSWORD || VIEWER_PASSWORD,
 );
 
+const OPERATOR_AUTH_CONFIGURED = Boolean(OPERATOR_TOKEN || OPERATOR_PASSWORD);
+
 const PASSWORD_LOGIN_AVAILABLE = Boolean(
   OPERATOR_PASSWORD || VIEWER_PASSWORD,
 );
 
 let SESSION_SECRET = process.env["QUEENSYNC_SESSION_SECRET"] ?? null;
 if (!SESSION_SECRET) {
+  if (IS_PRODUCTION && PASSWORD_LOGIN_AVAILABLE) {
+    // Wave 5: in production, password login REQUIRES a stable session
+    // secret — without it sessions silently invalidate on every restart
+    // (which on a Reserved VM also wipes the operator's login state).
+    throw new Error(
+      "QUEENSYNC_SESSION_SECRET must be set in production when password " +
+        "login is enabled. Generate with: node -e \"console.log(require('node:crypto').randomBytes(32).toString('hex'))\"",
+    );
+  }
   SESSION_SECRET = randomBytes(32).toString("hex");
   if (PASSWORD_LOGIN_AVAILABLE) {
     logger.warn(
@@ -46,6 +60,19 @@ if (!SESSION_SECRET) {
   }
 }
 
+if (IS_PRODUCTION && !OPERATOR_AUTH_CONFIGURED) {
+  // Wave 5: in production, refuse to start without OPERATOR auth
+  // specifically. A viewer-only token would still leave every mutating
+  // /api route locked but the OPEN-mode bypass would not trigger — so
+  // mutations would simply be unreachable. Worse, accidentally
+  // configuring only a viewer token in prod would silently leave the
+  // server with no admin access at all. Fail fast and loud instead.
+  throw new Error(
+    "QueenSync refuses to start in production without operator auth. " +
+      "Set QUEENSYNC_OPERATOR_TOKEN (recommended bearer-by-default) or " +
+      "QUEENSYNC_OPERATOR_PASSWORD (+ QUEENSYNC_SESSION_SECRET).",
+  );
+}
 if (!AUTH_CONFIGURED) {
   logger.warn(
     "QueenSync auth is OPEN — no QUEENSYNC_OPERATOR_TOKEN / QUEENSYNC_OPERATOR_PASSWORD configured. " +
@@ -296,16 +323,44 @@ export function signCallback(taskId: string, status: string): string | null {
 
 /**
  * Verifies callback authenticity in this priority:
- *   1. If QUEENSYNC_CALLBACK_SECRET set, require X-QueenSync-Signature
- *      header matching HMAC-SHA256(taskId:status).
- *   2. Else if an operator bearer token is set, require Authorization: Bearer <token>.
- *   3. Else (dev mode) accept and log a warning.
+ *   1. If the calling arm has a per-arm credential configured, require
+ *      X-QueenSync-Signature matching HMAC-SHA256(taskId:status) keyed by
+ *      the per-arm secret. This supersedes the shared QUEENSYNC_CALLBACK_SECRET
+ *      for that arm.
+ *   2. Else if QUEENSYNC_CALLBACK_SECRET is set, require X-QueenSync-Signature
+ *      keyed by the shared secret.
+ *   3. Else if an operator bearer token is set, require Authorization: Bearer <token>.
+ *   4. Else (dev mode) accept and log a warning.
+ *
+ * `arm` is the (already loaded) arm row associated with the inbound task.
+ * Pass null when the task has no assigned arm yet — we then fall back to
+ * the shared-secret path.
  */
 export function verifyCallbackAuth(
   req: Request,
   taskId: string,
   status: string,
+  arm?: Arm | null,
 ): { ok: boolean; reason?: string } {
+  // 1. Per-arm secret — preferred when configured.
+  if (arm?.credentialCipher) {
+    const provided = req.header(SIGNATURE_HEADER);
+    if (!provided) {
+      return { ok: false, reason: "missing per-arm signature" };
+    }
+    const secret = decryptArmSecret(arm.credentialCipher);
+    if (!secret) {
+      // Encryption key rotated/lost — fail closed rather than fall back.
+      return { ok: false, reason: "per-arm credential undecryptable" };
+    }
+    const expected = signCallbackWithArmSecret(secret, taskId, status);
+    if (!safeEqual(provided, expected)) {
+      return { ok: false, reason: "invalid per-arm signature" };
+    }
+    return { ok: true };
+  }
+
+  // 2. Shared HMAC fallback (deprecated but supported during migration).
   if (getCallbackSecret()) {
     const provided = req.header(SIGNATURE_HEADER);
     if (!provided) return { ok: false, reason: "missing signature" };
@@ -328,24 +383,61 @@ export function verifyCallbackAuth(
   }
   logger.warn(
     { taskId, status },
-    "callback accepted unauthenticated — set QUEENSYNC_CALLBACK_SECRET or QUEENSYNC_OPERATOR_TOKEN",
+    "callback accepted unauthenticated — set QUEENSYNC_CALLBACK_SECRET, per-arm credential, or QUEENSYNC_OPERATOR_TOKEN",
   );
   return { ok: true };
 }
 
+/**
+ * Apply outbound authentication headers when dispatching to an arm. Per-arm
+ * credentials (if configured) take precedence over the shared
+ * QUEENSYNC_API_KEY. Pass `arm` as the loaded arm row; pass null/undefined
+ * to use the legacy shared-key behaviour only.
+ */
+export function applyArmAuthHeaders(
+  arm: Pick<Arm, "authMethod" | "credentialCipher"> | null | undefined,
+  headers: Record<string, string>,
+): void;
+// Back-compat overload — the original signature took just authMethod.
 export function applyArmAuthHeaders(
   authMethod: string,
   headers: Record<string, string>,
+): void;
+export function applyArmAuthHeaders(
+  armOrMethod:
+    | Pick<Arm, "authMethod" | "credentialCipher">
+    | string
+    | null
+    | undefined,
+  headers: Record<string, string>,
 ) {
-  const apiKey = process.env["QUEENSYNC_API_KEY"];
-  if (!apiKey) return;
+  const authMethod =
+    typeof armOrMethod === "string"
+      ? armOrMethod
+      : (armOrMethod?.authMethod ?? "none");
+
+  // Try per-arm credential first.
+  let secret: string | null = null;
+  if (typeof armOrMethod === "object" && armOrMethod?.credentialCipher) {
+    secret = decryptArmSecret(armOrMethod.credentialCipher);
+    if (!secret) {
+      logger.warn(
+        "per-arm credential could not be decrypted — falling back to shared QUEENSYNC_API_KEY",
+      );
+    }
+  }
+  if (!secret) {
+    secret = process.env["QUEENSYNC_API_KEY"] ?? null;
+  }
+  if (!secret) return;
+
   switch (authMethod) {
     case "api_key":
-      headers["X-API-Key"] = apiKey;
+      headers["X-API-Key"] = secret;
       break;
     case "bearer":
     case "jwt":
-      headers["Authorization"] = `Bearer ${apiKey}`;
+      headers["Authorization"] = `Bearer ${secret}`;
       break;
     default:
       // none / unknown — no header

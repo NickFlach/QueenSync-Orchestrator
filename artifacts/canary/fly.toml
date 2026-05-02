@@ -1,0 +1,41 @@
+# Fly.io canary for QueenSync — free-tier external uptime check.
+#
+# Deploy with:
+#   cd artifacts/canary
+#   flyctl launch --no-deploy --copy-config --name queensync-canary
+#   flyctl secrets set QUEENSYNC_CANARY_ALERT_WEBHOOK="https://hooks.slack.com/..."
+#   flyctl secrets set QUEENSYNC_CANARY_TARGET_URL="https://console.ninja-portal.com/api/health"
+#   flyctl deploy
+
+app = "queensync-canary"
+primary_region = "ord"
+kill_signal = "SIGTERM"
+kill_timeout = 5
+
+[build]
+  builder = "heroku/buildpacks:20"
+
+[env]
+  QUEENSYNC_CANARY_INTERVAL_MS = "60000"
+  QUEENSYNC_CANARY_TIMEOUT_MS = "8000"
+  QUEENSYNC_CANARY_FAIL_AFTER = "2"
+  QUEENSYNC_CANARY_SOURCE = "fly-ord"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/healthz"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256

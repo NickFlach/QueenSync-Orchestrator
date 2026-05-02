@@ -90,6 +90,11 @@ export const ListArmsResponseItem = zod.object({
   resonanceSensitivity: zod.number().optional(),
   resonanceMode: zod.enum(["auto", "passive", "off"]).optional(),
   lastHeartbeat: zod.coerce.date().nullish(),
+  credentialHint: zod
+    .string()
+    .nullish()
+    .describe("Last 4 chars of the per-arm secret (when configured)"),
+  credentialUpdatedAt: zod.coerce.date().nullish(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -97,6 +102,12 @@ export const ListArmsResponse = zod.array(ListArmsResponseItem);
 
 export const OnboardArmBody = zod.object({
   name: zod.string(),
+  secret: zod
+    .string()
+    .nullish()
+    .describe(
+      'Optional per-arm secret (Wave 5). When omitted and authMethod is\nnot \"none\", the server auto-generates one. The plaintext is\nreturned exactly once on the response as `oneTimeSecret`.\nRequires QUEENSYNC_CREDENTIAL_KEY to be configured.\n',
+    ),
   type: zod.enum([
     "kannaktopus_arm",
     "human_configured",
@@ -156,6 +167,11 @@ export const GetArmResponse = zod
     resonanceSensitivity: zod.number().optional(),
     resonanceMode: zod.enum(["auto", "passive", "off"]).optional(),
     lastHeartbeat: zod.coerce.date().nullish(),
+    credentialHint: zod
+      .string()
+      .nullish()
+      .describe("Last 4 chars of the per-arm secret (when configured)"),
+    credentialUpdatedAt: zod.coerce.date().nullish(),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   })
@@ -184,6 +200,60 @@ export const GetArmResponse = zod
 
 export const RemoveArmParams = zod.object({
   id: zod.coerce.string(),
+});
+
+/**
+ * @summary Rotate the per-arm credential and return the new secret once
+ */
+export const RotateArmCredentialParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const RotateArmCredentialResponse = zod.object({
+  armId: zod.string(),
+  credentialHint: zod
+    .string()
+    .describe("Last 4 chars of the new secret (for UI\/audit only)"),
+  credentialUpdatedAt: zod.coerce.date(),
+  oneTimeSecret: zod
+    .string()
+    .describe(
+      "The new per-arm secret in plaintext. Returned exactly once —\nstore it now or rotate again. The server keeps only the\nciphertext + hint.\n",
+    ),
+  arm: zod.object({
+    id: zod.string(),
+    name: zod.string(),
+    type: zod
+      .enum([
+        "kannaktopus_arm",
+        "human_configured",
+        "api",
+        "local_simulated",
+        "replit_hosted",
+        "openclaw",
+        "external_webhook",
+        "mcp",
+        "oracle_admin",
+      ])
+      .describe("Agent type"),
+    status: zod.enum(["idle", "busy", "failed", "offline", "pending"]),
+    capabilities: zod.array(zod.string()),
+    endpointUrl: zod.string().nullish(),
+    heartbeatUrl: zod.string().nullish(),
+    authMethod: zod.enum(["none", "api_key", "bearer", "jwt"]),
+    description: zod.string().nullish(),
+    resonanceTags: zod.array(zod.string()).optional(),
+    resonanceSensitivity: zod.number().optional(),
+    resonanceMode: zod.enum(["auto", "passive", "off"]).optional(),
+    lastHeartbeat: zod.coerce.date().nullish(),
+    credentialHint: zod
+      .string()
+      .nullish()
+      .describe("Last 4 chars of the per-arm secret (when configured)"),
+    credentialUpdatedAt: zod.coerce.date().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
 });
 
 export const ArmHeartbeatParams = zod.object({
@@ -216,6 +286,11 @@ export const ArmHeartbeatResponse = zod.object({
   resonanceSensitivity: zod.number().optional(),
   resonanceMode: zod.enum(["auto", "passive", "off"]).optional(),
   lastHeartbeat: zod.coerce.date().nullish(),
+  credentialHint: zod
+    .string()
+    .nullish()
+    .describe("Last 4 chars of the per-arm secret (when configured)"),
+  credentialUpdatedAt: zod.coerce.date().nullish(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });

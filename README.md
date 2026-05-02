@@ -136,13 +136,130 @@ The Replit workflows (`artifacts/api-server: API Server` and
 ### Production checklist
 
 - [ ] `DATABASE_URL` provided by Replit Postgres
-- [ ] `QUEENSYNC_BASE_URL` set to the public URL (e.g. `https://ninja-portal.com`)
-- [ ] `QUEENSYNC_CALLBACK_SECRET` set (required for trusted external arms)
+- [ ] `QUEENSYNC_BASE_URL` set to the public URL (e.g. `https://console.ninja-portal.com`)
+- [ ] `QUEENSYNC_SESSION_SECRET` set (≥32 random bytes) — **required in
+      production** when `QUEENSYNC_OPERATOR_PASSWORD` is set; the server
+      refuses to boot without it.
+- [ ] `QUEENSYNC_OPERATOR_TOKEN` **or** (`QUEENSYNC_OPERATOR_USER` +
+      `QUEENSYNC_OPERATOR_PASSWORD`) set — the server refuses to boot in
+      `NODE_ENV=production` if neither auth method is configured.
+- [ ] `QUEENSYNC_CALLBACK_SECRET` set (shared fallback; per-arm secrets
+      take precedence — see Wave 5 below)
+- [ ] `QUEENSYNC_CREDENTIAL_KEY` set to a 32-byte hex or base64 value
+      (`openssl rand -hex 32`) — required to mint and rotate per-arm
+      credentials.
 - [ ] `QUEENSYNC_API_KEY` set if any arm needs auth headers on dispatch
+      and you have not yet onboarded it with a per-arm secret
 - [ ] `QUEENSYNC_ALLOWED_HOSTS` populated with the real arm hosts
 - [ ] `QUEENSYNC_ALLOW_PRIVATE_HOSTS` left unset (defaults to `false`)
+- [ ] `QUEENSYNC_LOG_FILE=/var/data/queensync/audit.log` set (Wave 5 —
+      append-only export sink survives redeploys; rotates at
+      `QUEENSYNC_LOG_FILE_MAX_BYTES`, default 25 MB)
 - [ ] Reserved VM deployment tier selected (for WebSocket persistence)
-- [ ] Custom domain attached and DNS validated
+- [ ] Custom domain `console.ninja-portal.com` attached and DNS validated
+- [ ] External canary deployed — see [`artifacts/canary/README.md`](artifacts/canary/README.md)
+
+### Wave 5 — per-arm credentials
+
+Wave 5 (ADR-002) replaces the single shared `QUEENSYNC_API_KEY` /
+`QUEENSYNC_CALLBACK_SECRET` with per-arm secrets that can be rotated
+independently.
+
+**Storage.** The plaintext per-arm secret is needed both for outbound
+dispatch headers (Bearer / `x-api-key`) and for verifying inbound
+callback signatures, so it is **encrypted at rest** with AES-256-GCM
+(not hashed). The key is `QUEENSYNC_CREDENTIAL_KEY` — 32 bytes provided
+as hex or base64. Only the ciphertext and a 4-character display hint
+(e.g. `…a1f3`) are persisted on the `arms` row. Rotation invalidates the
+previous secret immediately.
+
+**Onboarding.** `POST /api/arms` accepts an optional `secret`. When
+omitted and `authMethod != "none"`, the server auto-generates one. The
+plaintext is returned **once** in the response as `oneTimeSecret` —
+copy it then; the server keeps only the ciphertext.
+
+```bash
+curl -X POST https://console.ninja-portal.com/api/arms \
+  -H "authorization: Bearer $QUEENSYNC_OPERATOR_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{
+    "name": "openclaw-forge-eu",
+    "type": "external_webhook",
+    "capabilities": ["artifact", "build"],
+    "endpointUrl": "https://forge.example.com/queensync/dispatch",
+    "authMethod": "bearer"
+  }'
+# → 201 { ..., "credentialHint": "…a1f3", "oneTimeSecret": "…copy me…" }
+```
+
+**Rotation.** `POST /api/arms/{id}/rotate-credential` mints a fresh
+secret, persists the new ciphertext, and returns the plaintext once.
+Rotate immediately if a secret leaks, on operator handoff, and on a
+quarterly cadence at minimum.
+
+```bash
+curl -X POST https://console.ninja-portal.com/api/arms/$ARM_ID/rotate-credential \
+  -H "authorization: Bearer $QUEENSYNC_OPERATOR_TOKEN"
+# → 200 { armId, credentialHint, credentialUpdatedAt, oneTimeSecret, arm }
+```
+
+**Fallback.** Until every arm has been re-onboarded with a per-arm
+secret, the legacy shared `QUEENSYNC_API_KEY` /
+`QUEENSYNC_CALLBACK_SECRET` continue to work. Per-arm wins when both are
+present. Once all arms are migrated, you may unset the shared values.
+
+### Production deploy — Replit Reserved VM
+
+0. **Apply the schema migration.** Wave 5 added `credential_cipher`,
+   `credential_hint`, and `credential_updated_at` columns to the `arms`
+   table. Before the new build boots, run
+   `pnpm --filter @workspace/db run push` against the production
+   `DATABASE_URL` (or include it in your release script). The columns
+   default to `NULL` so existing rows stay valid; the shared
+   `QUEENSYNC_API_KEY` fallback continues to work for any arm that has
+   no per-arm secret yet.
+1. **Reserved VM, not Autoscale.** The console holds long-lived
+   WebSocket connections; Autoscale terminates them.
+2. **Domain.** Bind `console.ninja-portal.com` in the Replit Deployments
+   panel; set `QUEENSYNC_BASE_URL=https://console.ninja-portal.com` so
+   callback URLs reflect the real hostname.
+3. **Boot guard.** With `NODE_ENV=production`, the server refuses to
+   start unless an auth method is configured. If you set
+   `QUEENSYNC_OPERATOR_PASSWORD` you **must** also set
+   `QUEENSYNC_SESSION_SECRET`.
+4. **First boot.** Hit `/api/health` and check `WS · OPEN` in the
+   sidebar at `/`. Confirm `QUEENSYNC_LOG_FILE` is being appended (e.g.
+   `tail -f /var/data/queensync/audit.log`).
+5. **Canary.** Deploy `artifacts/canary/` to Fly.io so an external
+   observer alerts on Oracle outages even when the console itself is
+   unreachable.
+
+### Decommissioning `kannaka-staff`
+
+The `kannaka-staff` Replit project served as the original ops crew
+host. As of Wave 5 the same arms (`signal_keeper_01`,
+`memory_keeper_01`, `auditor_01`, `atelier_01`) are seeded directly into
+QueenSync's database (see Kannaka repo mapping below) and dispatched
+through QueenSync's router. The standalone project is therefore
+redundant.
+
+Decommission checklist:
+
+- [ ] Confirm none of the four ops arms still point `endpointUrl` at the
+      old `kannaka-staff` host. Run `SELECT id, name, endpoint_url FROM
+      arms WHERE name IN ('signal_keeper_01','memory_keeper_01','auditor_01','atelier_01');`
+      in production and re-onboard via `POST /api/arms` if any do.
+- [ ] Re-onboard with per-arm secrets (see Wave 5 above) and store the
+      returned `oneTimeSecret` in the operator vault.
+- [ ] Drain in-flight tasks: `SELECT count(*) FROM tasks WHERE status IN
+      ('pending','running');` should be 0 before shutdown.
+- [ ] Snapshot the legacy project (Replit project menu → Download as
+      zip) and archive to long-term storage.
+- [ ] Stop the legacy workflow, then delete the Replit project.
+- [ ] Remove DNS records pointing at it.
+- [ ] Update `QUEENSYNC_ALLOWED_HOSTS` to drop the legacy hostname.
+- [ ] Once the canary has been green for 7 days post-cutover, unset the
+      shared `QUEENSYNC_API_KEY` so all arms must use per-arm secrets.
 
 ## How to onboard agents
 

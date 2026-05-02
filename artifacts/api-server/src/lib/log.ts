@@ -2,6 +2,7 @@ import { nanoid } from "nanoid";
 import { db, logsTable, type InsertLogEntry } from "@workspace/db";
 import { broadcast } from "./ws";
 import type { AuditContext } from "./audit";
+import { appendLogExport } from "./log-export";
 
 export type LogInput = Omit<InsertLogEntry, "id" | "createdAt"> & {
   audit?: AuditContext;
@@ -26,5 +27,8 @@ export async function recordLog(entry: LogInput) {
     })
     .returning();
   broadcast({ type: "log_event", data: row });
+  // Best-effort append to the export sink (no-op when QUEENSYNC_LOG_FILE
+  // is not set). Errors are swallowed inside appendLogExport.
+  void appendLogExport(row);
   return row;
 }

@@ -29,6 +29,13 @@ export interface Arm {
   resonanceMode?: ArmResonanceMode;
   /** @nullable */
   lastHeartbeat?: Date | null;
+  /**
+   * Last 4 chars of the per-arm secret (when configured)
+   * @nullable
+   */
+  credentialHint?: string | null;
+  /** @nullable */
+  credentialUpdatedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

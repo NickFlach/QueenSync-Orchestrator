@@ -11,6 +11,15 @@ import type { OnboardArmBodyType } from "./onboardArmBodyType";
 
 export interface OnboardArmBody {
   name: string;
+  /**
+   * Optional per-arm secret (Wave 5). When omitted and authMethod is
+not "none", the server auto-generates one. The plaintext is
+returned exactly once on the response as `oneTimeSecret`.
+Requires QUEENSYNC_CREDENTIAL_KEY to be configured.
+
+   * @nullable
+   */
+  secret?: string | null;
   type: OnboardArmBodyType;
   capabilities: string[];
   /** @nullable */

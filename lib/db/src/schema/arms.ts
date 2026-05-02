@@ -20,6 +20,16 @@ export const armsTable = pgTable("arms", {
     .notNull()
     .default(0.5),
   resonanceMode: text("resonance_mode").notNull().default("auto"),
+  // Wave 5 — per-arm credential. Stored as AES-256-GCM ciphertext keyed by
+  // QUEENSYNC_CREDENTIAL_KEY (32 bytes, hex/base64). credentialHint is the
+  // last 4 chars of the plaintext for UI/audit. NULL means "no per-arm
+  // secret configured — fall back to shared QUEENSYNC_API_KEY /
+  // QUEENSYNC_CALLBACK_SECRET".
+  credentialCipher: text("credential_cipher"),
+  credentialHint: text("credential_hint"),
+  credentialUpdatedAt: timestamp("credential_updated_at", {
+    withTimezone: true,
+  }),
   lastHeartbeat: timestamp("last_heartbeat", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

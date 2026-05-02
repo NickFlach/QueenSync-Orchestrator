@@ -123,8 +123,41 @@ export interface Arm {
   resonanceMode?: ArmResonanceMode;
   /** @nullable */
   lastHeartbeat?: string | null;
+  /**
+   * Last 4 chars of the per-arm secret (when configured)
+   * @nullable
+   */
+  credentialHint?: string | null;
+  /** @nullable */
+  credentialUpdatedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type OnboardArmResponse = Arm & {
+  /**
+   * The newly minted per-arm secret in plaintext. Returned
+exactly once, only on this initial 201 response. NULL when
+no per-arm credential was created (e.g. authMethod=none
+and no `secret` was supplied, or QUEENSYNC_CREDENTIAL_KEY
+is unset).
+
+   * @nullable
+   */
+  oneTimeSecret?: string | null;
+};
+
+export interface ArmCredentialRotation {
+  armId: string;
+  /** Last 4 chars of the new secret (for UI/audit only) */
+  credentialHint: string;
+  credentialUpdatedAt: string;
+  /** The new per-arm secret in plaintext. Returned exactly once —
+store it now or rotate again. The server keeps only the
+ciphertext + hint.
+ */
+  oneTimeSecret: string;
+  arm: Arm;
 }
 
 export type TaskStatus = (typeof TaskStatus)[keyof typeof TaskStatus];
@@ -202,6 +235,15 @@ export const OnboardArmBodyResonanceMode = {
 
 export interface OnboardArmBody {
   name: string;
+  /**
+   * Optional per-arm secret (Wave 5). When omitted and authMethod is
+not "none", the server auto-generates one. The plaintext is
+returned exactly once on the response as `oneTimeSecret`.
+Requires QUEENSYNC_CREDENTIAL_KEY to be configured.
+
+   * @nullable
+   */
+  secret?: string | null;
   type: OnboardArmBodyType;
   capabilities: string[];
   /** @nullable */

@@ -30,7 +30,23 @@ Two auth modes:
 
 The frontend (`artifacts/queensync`) gates the entire app behind `<AuthProvider>`/`LoginScreen`. Sidebar shows the current role and a sign-out button. 401/403 responses on any query/mutation auto-trigger a session refresh, which falls back to the login screen if the session has expired.
 
-If **no** auth env vars are set, the server starts in OPEN mode (warns at startup, treats every caller as operator) — useful for local demo only. **Configure at least `QUEENSYNC_OPERATOR_TOKEN` or `QUEENSYNC_OPERATOR_PASSWORD` before exposing the app beyond a private demo.** WebSocket clients without a session cookie can authenticate via `?token=<bearer>` query param.
+**Wave 5 production hardening (`NODE_ENV=production`)**: the server now refuses to boot if neither `QUEENSYNC_OPERATOR_TOKEN` nor `QUEENSYNC_OPERATOR_PASSWORD` is set, and refuses to boot when password login is configured without a real `QUEENSYNC_SESSION_SECRET` (no more ephemeral fallback in prod). In dev/test, OPEN mode + ephemeral session secret continue to work. WebSocket clients without a session cookie can authenticate via `?token=<bearer>` query param.
+
+## QueenSync per-arm credentials (Wave 5)
+
+`lib/db/src/schema/arms.ts` carries `credentialCipher` / `credentialHint` / `credentialUpdatedAt`. `artifacts/api-server/src/lib/credentials.ts` AES-256-GCM-encrypts per-arm secrets keyed by `QUEENSYNC_CREDENTIAL_KEY` (32 bytes hex/base64). Drift from task spec: secrets are encrypted-at-rest (not hashed) because the plaintext is required both for signing inbound callbacks **and** for outbound dispatch headers — a one-way hash cannot do the latter.
+
+- `POST /api/arms` accepts optional `secret`; auto-generates one when `authMethod !== "none"` and storage is enabled. Plaintext returned exactly once as `oneTimeSecret`.
+- `POST /api/arms/:id/rotate-credential` mints a new secret and returns it once. Old secret is invalid immediately.
+- `lib/router.ts:dispatchExternal` and `lib/auth.ts:verifyCallbackAuth` prefer per-arm secret, fall back to shared `QUEENSYNC_API_KEY` / `QUEENSYNC_CALLBACK_SECRET` for arms not yet migrated.
+
+## QueenSync log export (Wave 5)
+
+`artifacts/api-server/src/lib/log-export.ts` appends every `recordLog()` row as NDJSON to `QUEENSYNC_LOG_FILE` (when set). Rotates at `QUEENSYNC_LOG_FILE_MAX_BYTES` (default 25 MB) by renaming with an ISO-timestamp suffix. Best-effort; failures are logged once and swallowed so the request path never blocks on disk.
+
+## QueenSync external canary (Wave 5)
+
+`artifacts/canary/` is a standalone Node 20 service deployed to Fly.io's free tier. Pings `QUEENSYNC_CANARY_TARGET_URL` (default `https://console.ninja-portal.com/api/healthz`) every 60s and POSTs JSON alerts to `QUEENSYNC_CANARY_ALERT_WEBHOOK` after `QUEENSYNC_CANARY_FAIL_AFTER` consecutive failures (recovery alert on first success after that). Not a Replit artifact — `artifacts/canary/{package.json,Dockerfile,fly.toml,README.md,src/index.mjs}`. Deploy with `flyctl deploy` from inside the directory.
 
 ## Stack
 

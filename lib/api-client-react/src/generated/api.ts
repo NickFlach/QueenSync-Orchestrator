@@ -22,6 +22,7 @@ import type {
   AdapterHealth,
   AdapterPullResult,
   Arm,
+  ArmCredentialRotation,
   ArmDetail,
   ConnectionTestResult,
   CreateResonanceBody,
@@ -43,6 +44,7 @@ import type {
   ObservatoryConfig,
   ObservatoryState,
   OnboardArmBody,
+  OnboardArmResponse,
   PrivilegedDispatch,
   PrivilegedDispatchRecentStats,
   PrivilegedDispatchRecentStatsParams,
@@ -279,8 +281,8 @@ export const getOnboardArmUrl = () => {
 export const onboardArm = async (
   onboardArmBody: OnboardArmBody,
   options?: RequestInit,
-): Promise<Arm> => {
-  return customFetch<Arm>(getOnboardArmUrl(), {
+): Promise<OnboardArmResponse> => {
+  return customFetch<OnboardArmResponse>(getOnboardArmUrl(), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
@@ -496,6 +498,90 @@ export const useRemoveArm = <
   TContext
 > => {
   return useMutation(getRemoveArmMutationOptions(options));
+};
+
+/**
+ * @summary Rotate the per-arm credential and return the new secret once
+ */
+export const getRotateArmCredentialUrl = (id: string) => {
+  return `/api/arms/${id}/rotate-credential`;
+};
+
+export const rotateArmCredential = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ArmCredentialRotation> => {
+  return customFetch<ArmCredentialRotation>(getRotateArmCredentialUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRotateArmCredentialMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rotateArmCredential>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof rotateArmCredential>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["rotateArmCredential"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof rotateArmCredential>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return rotateArmCredential(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RotateArmCredentialMutationResult = NonNullable<
+  Awaited<ReturnType<typeof rotateArmCredential>>
+>;
+
+export type RotateArmCredentialMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Rotate the per-arm credential and return the new secret once
+ */
+export const useRotateArmCredential = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rotateArmCredential>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof rotateArmCredential>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getRotateArmCredentialMutationOptions(options));
 };
 
 export const getArmHeartbeatUrl = (id: string) => {

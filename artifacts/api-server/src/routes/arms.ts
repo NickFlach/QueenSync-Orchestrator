@@ -13,6 +13,15 @@ import { broadcast } from "../lib/ws";
 import { validateOutboundUrl, logBlockedUrl } from "../lib/url-guard";
 import { safeFetch, BlockedUrlError } from "../lib/safe-fetch";
 import { requireOperator } from "../lib/auth";
+import {
+  encryptArmSecret,
+  generateArmSecret,
+  hintFor,
+  isCredentialStorageEnabled,
+  sanitizeArm,
+  sanitizeArms,
+} from "../lib/credentials";
+import { getAuditContext } from "../lib/audit";
 import { SUBJECTS } from "@workspace/nats";
 import { getNatsClient, getNatsStatus } from "../lib/nats-bridge";
 
@@ -23,7 +32,7 @@ router.get("/arms", async (_req, res): Promise<void> => {
     .select()
     .from(armsTable)
     .orderBy(desc(armsTable.createdAt));
-  res.json(rows);
+  res.json(sanitizeArms(rows));
 });
 
 router.post("/arms", requireOperator, async (req, res): Promise<void> => {
@@ -33,6 +42,36 @@ router.post("/arms", requireOperator, async (req, res): Promise<void> => {
     return;
   }
   const body = parsed.data;
+  // Wave 5 — per-arm credential. Accept an optional `secret` from the body.
+  // If not provided AND credential storage is enabled AND authMethod !==
+  // "none", auto-generate one. Returned ONCE in the 201 response under
+  // `oneTimeSecret` — never persisted in plaintext.
+  const rawSecret =
+    typeof (req.body as Record<string, unknown> | null)?.["secret"] === "string"
+      ? ((req.body as Record<string, string>)["secret"] as string)
+      : null;
+  let credentialCipher: string | null = null;
+  let credentialHint: string | null = null;
+  let credentialUpdatedAt: Date | null = null;
+  let oneTimeSecret: string | null = null;
+  if (isCredentialStorageEnabled()) {
+    let secret = rawSecret;
+    if (!secret && body.authMethod !== "none") {
+      secret = generateArmSecret();
+    }
+    if (secret) {
+      credentialCipher = encryptArmSecret(secret);
+      credentialHint = hintFor(secret);
+      credentialUpdatedAt = new Date();
+      oneTimeSecret = secret;
+    }
+  } else if (rawSecret) {
+    res.status(400).json({
+      error:
+        "QUEENSYNC_CREDENTIAL_KEY is not configured — cannot store per-arm secret",
+    });
+    return;
+  }
   for (const [field, value] of [
     ["endpointUrl", body.endpointUrl],
     ["heartbeatUrl", body.heartbeatUrl],
@@ -68,18 +107,85 @@ router.post("/arms", requireOperator, async (req, res): Promise<void> => {
       // arm is demoted after QUEENSYNC_ARM_STALE_MS (mirrors the seed-path
       // behavior in lib/seed.ts).
       lastHeartbeat: body.heartbeatUrl ? new Date() : null,
+      credentialCipher,
+      credentialHint,
+      credentialUpdatedAt,
     })
     .returning();
   await recordLog({
     eventType: "arm_registered",
     source: row.id,
     summary: `Arm ${row.name} registered (${row.type})`,
-    metadata: { armId: row.id, capabilities: row.capabilities },
+    metadata: {
+      armId: row.id,
+      capabilities: row.capabilities,
+      hasPerArmSecret: Boolean(credentialCipher),
+    },
+    audit: getAuditContext(req),
   });
-  broadcast({ type: "arm_registered", data: row });
+  const safeRow = sanitizeArm(row);
+  broadcast({ type: "arm_registered", data: safeRow });
   broadcast({ type: "arms_updated", data: { armId: row.id, status: "idle" } });
-  res.status(201).json(row);
+  // The plaintext secret is returned exactly once. The DB stores only the
+  // ciphertext + last-4 hint. Operators must record the secret now or
+  // call POST /arms/:id/rotate-credential to generate a new one.
+  res.status(201).json({ ...safeRow, oneTimeSecret });
 });
+
+/**
+ * Rotate the per-arm credential. Returns the new plaintext secret exactly
+ * once. Requires QUEENSYNC_CREDENTIAL_KEY to be configured.
+ */
+router.post(
+  "/arms/:id/rotate-credential",
+  requireOperator,
+  async (req, res): Promise<void> => {
+    if (!isCredentialStorageEnabled()) {
+      res.status(400).json({
+        error:
+          "QUEENSYNC_CREDENTIAL_KEY is not configured — cannot rotate per-arm credential",
+      });
+      return;
+    }
+    const id = String(req.params.id);
+    const [arm] = await db
+      .select()
+      .from(armsTable)
+      .where(eq(armsTable.id, id));
+    if (!arm) {
+      res.status(404).json({ error: "arm not found" });
+      return;
+    }
+    const secret = generateArmSecret();
+    const cipher = encryptArmSecret(secret);
+    const hint = hintFor(secret);
+    const now = new Date();
+    const [updated] = await db
+      .update(armsTable)
+      .set({
+        credentialCipher: cipher,
+        credentialHint: hint,
+        credentialUpdatedAt: now,
+      })
+      .where(eq(armsTable.id, id))
+      .returning();
+    await recordLog({
+      eventType: "arm_credential_rotated",
+      source: id,
+      summary: `Per-arm credential rotated for ${arm.name} (${hint})`,
+      metadata: { armId: id, hint },
+      audit: getAuditContext(req),
+    });
+    broadcast({ type: "arms_updated", data: { armId: id, status: arm.status } });
+    res.json({
+      armId: id,
+      credentialHint: hint,
+      credentialUpdatedAt: now.toISOString(),
+      oneTimeSecret: secret,
+      arm: sanitizeArm(updated),
+    });
+  },
+);
 
 router.get("/arms/:id", async (req, res): Promise<void> => {
   const id = String(req.params.id);
@@ -99,7 +205,7 @@ router.get("/arms/:id", async (req, res): Promise<void> => {
     .from(memoryEventsTable)
     .where(eq(memoryEventsTable.agentId, id));
   res.json({
-    ...arm,
+    ...sanitizeArm(arm),
     recentTasks,
     memoryContributionCount: memoryRows.length,
   });
@@ -147,7 +253,7 @@ router.post("/arms/:id/heartbeat", requireOperator, async (req, res): Promise<vo
     metadata: { armId: id },
   });
   broadcast({ type: "arms_updated", data: { armId: id, status: "idle" } });
-  res.json(updated);
+  res.json(sanitizeArm(updated));
 });
 
 // Arms whose `resonanceTags` include this marker are probed via NATS

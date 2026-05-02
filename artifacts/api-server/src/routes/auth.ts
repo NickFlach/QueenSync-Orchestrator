@@ -9,6 +9,8 @@ import {
   shouldRequireAuthForReads,
   SESSION_COOKIE,
 } from "../lib/auth";
+import { recordLog } from "../lib/log";
+import { getAuditContext } from "../lib/audit";
 
 const router: IRouter = Router();
 
@@ -50,6 +52,15 @@ router.post("/auth/login", (req, res): void => {
   }
   const role = authenticateWithPassword(password);
   if (!role) {
+    // Wave 5 — auth audit. Login failures land in the Execution Log AND
+    // the QUEENSYNC_LOG_FILE export sink so post-incident review can
+    // spot brute-force attempts even after a redeploy wipes stdout.
+    void recordLog({
+      eventType: "auth_login_failed",
+      source: "auth",
+      summary: "Login failed: invalid password",
+      audit: getAuditContext(req),
+    });
     res.status(401).json({ error: "invalid password" });
     return;
   }
@@ -62,10 +73,25 @@ router.post("/auth/login", (req, res): void => {
     path: "/",
     maxAge: maxAgeMs,
   });
+  void recordLog({
+    eventType: "auth_login_success",
+    source: "auth",
+    summary: `Login succeeded as ${role}`,
+    metadata: { role },
+    audit: getAuditContext(req),
+  });
   res.json({ role, authConfigured: true });
 });
 
-router.post("/auth/logout", (_req, res): void => {
+router.post("/auth/logout", (req, res): void => {
+  const ctx = getRequestAuth(req) ?? inspectAuth(req);
+  void recordLog({
+    eventType: "auth_logout",
+    source: "auth",
+    summary: `Logout (${ctx.role ?? "anonymous"})`,
+    metadata: { role: ctx.role, source: ctx.source },
+    audit: getAuditContext(req),
+  });
   res.clearCookie(SESSION_COOKIE, { path: "/" });
   res.status(204).end();
 });

@@ -107,7 +107,21 @@ router.post("/tasks/:id/callback", callbackLimiter, async (req, res): Promise<vo
   }
   const body = parsed.data;
   const audit = getAuditContext(req);
-  const auth = verifyCallbackAuth(req, id, body.status);
+  // Load the task first so we can find the assigned arm and use its
+  // per-arm credential to verify the callback signature.
+  const [taskForAuth] = await db
+    .select()
+    .from(tasksTable)
+    .where(eq(tasksTable.id, id));
+  let armForAuth = null;
+  if (taskForAuth?.assignedArmId) {
+    const rows = await db
+      .select()
+      .from(armsTable)
+      .where(eq(armsTable.id, taskForAuth.assignedArmId));
+    armForAuth = rows[0] ?? null;
+  }
+  const auth = verifyCallbackAuth(req, id, body.status, armForAuth);
   if (!auth.ok) {
     await recordLog({
       eventType: "callback_rejected",
@@ -119,10 +133,7 @@ router.post("/tasks/:id/callback", callbackLimiter, async (req, res): Promise<vo
     res.status(401).json({ error: `callback rejected: ${auth.reason}` });
     return;
   }
-  const [task] = await db
-    .select()
-    .from(tasksTable)
-    .where(eq(tasksTable.id, id));
+  const task = taskForAuth;
   if (!task) {
     res.status(404).json({ error: "task not found" });
     return;

@@ -70,7 +70,7 @@ paths:
           description: Created
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Arm" }
+              schema: { $ref: "#/components/schemas/OnboardArmResponse" }
 
   /arms/{id}:
     get:
@@ -97,6 +97,23 @@ paths:
           schema: { type: string }
       responses:
         "204": { description: Deleted }
+
+  /arms/{id}/rotate-credential:
+    post:
+      operationId: rotateArmCredential
+      tags: [arms]
+      summary: Rotate the per-arm credential and return the new secret once
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArmCredentialRotation" }
 
   /arms/{id}/heartbeat:
     post:
@@ -738,6 +755,37 @@ components:
         observatoryStatus: { type: string }
         nats: { $ref: "#/components/schemas/NatsStatus" }
 
+    OnboardArmResponse:
+      allOf:
+        - $ref: "#/components/schemas/Arm"
+        - type: object
+          properties:
+            oneTimeSecret:
+              type: ["string", "null"]
+              description: |
+                The newly minted per-arm secret in plaintext. Returned
+                exactly once, only on this initial 201 response. NULL when
+                no per-arm credential was created (e.g. authMethod=none
+                and no `secret` was supplied, or QUEENSYNC_CREDENTIAL_KEY
+                is unset).
+
+    ArmCredentialRotation:
+      type: object
+      required: [armId, credentialHint, credentialUpdatedAt, oneTimeSecret, arm]
+      properties:
+        armId: { type: string }
+        credentialHint:
+          type: string
+          description: Last 4 chars of the new secret (for UI/audit only)
+        credentialUpdatedAt: { type: string, format: date-time }
+        oneTimeSecret:
+          type: string
+          description: |
+            The new per-arm secret in plaintext. Returned exactly once —
+            store it now or rotate again. The server keeps only the
+            ciphertext + hint.
+        arm: { $ref: "#/components/schemas/Arm" }
+
     Arm:
       type: object
       required:
@@ -787,6 +835,10 @@ components:
           type: string
           enum: [auto, passive, off]
         lastHeartbeat: { type: ["string", "null"], format: date-time }
+        credentialHint:
+          type: ["string", "null"]
+          description: Last 4 chars of the per-arm secret (when configured)
+        credentialUpdatedAt: { type: ["string", "null"], format: date-time }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
 
@@ -806,6 +858,13 @@ components:
       required: [name, type, capabilities, authMethod]
       properties:
         name: { type: string }
+        secret:
+          type: ["string", "null"]
+          description: |
+            Optional per-arm secret (Wave 5). When omitted and authMethod is
+            not "none", the server auto-generates one. The plaintext is
+            returned exactly once on the response as `oneTimeSecret`.
+            Requires QUEENSYNC_CREDENTIAL_KEY to be configured.
         type:
           type: string
           enum:

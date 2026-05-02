@@ -7,6 +7,7 @@ import {
   useOnboardArm,
   useGetArm,
   useCreateTask,
+  useRotateArmCredential,
   getListArmsQueryKey,
   getGetArmQueryKey,
   getListTasksQueryKey,
@@ -158,11 +159,22 @@ export default function ArmsRegistry() {
         queryClient.invalidateQueries({ queryKey: getListArmsQueryKey() }),
     },
   });
+  const [onboardSecret, setOnboardSecret] = useState<string | null>(null);
+  const [onboardSecretArmName, setOnboardSecretArmName] = useState<string>("");
   const onboardMutation = useOnboardArm({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (resp) => {
         toast({ title: "Arm Onboarded", description: name });
         queryClient.invalidateQueries({ queryKey: getListArmsQueryKey() });
+        const secret = (resp as { oneTimeSecret?: string | null })
+          .oneTimeSecret;
+        if (secret) {
+          // Wave 5: surface the auto-generated per-arm secret immediately
+          // — it's the operator's only chance to capture it before the
+          // server discards the plaintext.
+          setOnboardSecretArmName(name);
+          setOnboardSecret(secret);
+        }
         setOpen(false);
         setName("");
       },
@@ -419,6 +431,57 @@ export default function ArmsRegistry() {
       </div>
 
       <ArmDetailDialog id={detailId} onClose={() => setDetailId(null)} />
+      <Dialog
+        open={!!onboardSecret}
+        onOpenChange={(o) => {
+          if (!o) {
+            setOnboardSecret(null);
+            setOnboardSecretArmName("");
+          }
+        }}
+      >
+        <DialogContent className="bg-card border-border/50 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-primary uppercase tracking-wider">
+              Save this credential
+            </DialogTitle>
+            <DialogDescription>
+              The per-arm secret for{" "}
+              <span className="text-primary">{onboardSecretArmName}</span> was
+              generated. Copy it now — the server only stores the encrypted
+              ciphertext + last-4 hint and cannot show it again. Use Rotate in
+              the arm detail panel to replace a lost secret.
+            </DialogDescription>
+          </DialogHeader>
+          <div
+            className="rounded border border-primary/40 bg-primary/5 p-3 font-mono text-xs break-all"
+            data-testid="arm-onboard-onetime"
+          >
+            {onboardSecret ?? ""}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (onboardSecret) {
+                  void navigator.clipboard.writeText(onboardSecret);
+                  toast({ title: "Copied to clipboard" });
+                }
+              }}
+            >
+              Copy
+            </Button>
+            <Button
+              onClick={() => {
+                setOnboardSecret(null);
+                setOnboardSecretArmName("");
+              }}
+            >
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -611,9 +674,127 @@ function ArmDetailDialog({
             <div className="text-xs text-muted-foreground">
               Memory contributions: {data.memoryContributionCount}
             </div>
+            <ArmCredentialPanel
+              armId={data.id}
+              credentialHint={data.credentialHint ?? null}
+              credentialUpdatedAt={data.credentialUpdatedAt ?? null}
+            />
           </div>
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ArmCredentialPanel({
+  armId,
+  credentialHint,
+  credentialUpdatedAt,
+}: {
+  armId: string;
+  credentialHint: string | null;
+  credentialUpdatedAt: string | null;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [oneTimeSecret, setOneTimeSecret] = useState<string | null>(null);
+  const [showSecret, setShowSecret] = useState(false);
+  const rotate = useRotateArmCredential({
+    mutation: {
+      onSuccess: (resp) => {
+        setOneTimeSecret(resp.oneTimeSecret);
+        setShowSecret(true);
+        queryClient.invalidateQueries({ queryKey: getGetArmQueryKey(armId) });
+        queryClient.invalidateQueries({ queryKey: getListArmsQueryKey() });
+        toast({
+          title: "Credential rotated",
+          description: `New hint …${resp.credentialHint.slice(-4)}`,
+        });
+      },
+      onError: (err) =>
+        toast({
+          title: "Rotation failed",
+          description: (err as Error).message,
+          variant: "destructive",
+        }),
+    },
+  });
+  return (
+    <div
+      className="space-y-2 rounded border border-border/50 bg-background/50 p-3"
+      data-testid="arm-credential-panel"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <Label className="text-xs uppercase text-muted-foreground">
+            Per-arm credential
+          </Label>
+          <div className="text-xs font-mono">
+            {credentialHint ? (
+              <>
+                hint <span className="text-primary">…{credentialHint.slice(-4)}</span>
+                {credentialUpdatedAt ? (
+                  <span className="text-muted-foreground">
+                    {" "}· rotated {new Date(credentialUpdatedAt).toLocaleString()}
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              <span className="text-muted-foreground">
+                none — using shared QUEENSYNC_API_KEY fallback
+              </span>
+            )}
+          </div>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={rotate.isPending}
+          onClick={() => rotate.mutate({ id: armId })}
+          data-testid="button-rotate-credential"
+        >
+          {rotate.isPending ? "Rotating…" : "Rotate"}
+        </Button>
+      </div>
+      <Dialog
+        open={showSecret}
+        onOpenChange={(o) => {
+          setShowSecret(o);
+          if (!o) setOneTimeSecret(null);
+        }}
+      >
+        <DialogContent className="bg-card border-border/50 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-primary uppercase tracking-wider">
+              New credential
+            </DialogTitle>
+            <DialogDescription>
+              Copy this secret now. It will not be shown again — the server
+              keeps only the encrypted ciphertext and the 4-char hint.
+            </DialogDescription>
+          </DialogHeader>
+          <div
+            className="rounded border border-primary/40 bg-primary/5 p-3 font-mono text-xs break-all"
+            data-testid="arm-credential-onetime"
+          >
+            {oneTimeSecret ?? ""}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (oneTimeSecret) {
+                  void navigator.clipboard.writeText(oneTimeSecret);
+                  toast({ title: "Copied to clipboard" });
+                }
+              }}
+            >
+              Copy
+            </Button>
+            <Button onClick={() => setShowSecret(false)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

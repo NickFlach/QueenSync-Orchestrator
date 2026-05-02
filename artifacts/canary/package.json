@@ -1,0 +1,14 @@
+{
+  "name": "queensync-canary",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Fly.io free-tier external canary for QueenSync. Pings /api/health from outside Oracle's network and posts alerts to a webhook on failure.",
+  "scripts": {
+    "start": "node ./src/index.mjs",
+    "once": "node ./src/index.mjs --once"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
