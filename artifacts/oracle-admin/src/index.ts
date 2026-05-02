@@ -17,13 +17,15 @@ const SECRET = process.env["QUEENSYNC_ORACLE_ADMIN_HMAC_SECRET"] ?? "";
 const ALLOW_UNSIGNED = process.env["ORACLE_ADMIN_ALLOW_UNSIGNED"] === "true";
 const REQUIRE_SIG = !ALLOW_UNSIGNED;
 
-// Production safety: refuse to start if the operator has disabled HMAC
-// verification outside an explicit development environment. Unsigned
-// dispatch is a privileged-execution escape hatch and must never silently
-// run in production.
-if (ALLOW_UNSIGNED && process.env["NODE_ENV"] === "production") {
+// Production safety: unsigned mode is a privileged-execution escape hatch
+// and must require an explicit development environment. Refuse to start
+// unless NODE_ENV is exactly "development" — anything else (production,
+// staging, test, or unset) blocks the unsigned path. The shipped systemd
+// unit pins NODE_ENV=production for defense in depth.
+if (ALLOW_UNSIGNED && process.env["NODE_ENV"] !== "development") {
   logger.fatal(
-    "ORACLE_ADMIN_ALLOW_UNSIGNED=true is forbidden when NODE_ENV=production. " +
+    { nodeEnv: process.env["NODE_ENV"] ?? "(unset)" },
+    "ORACLE_ADMIN_ALLOW_UNSIGNED=true is only permitted when NODE_ENV=development. " +
       "Unset the variable or run with NODE_ENV=development.",
   );
   process.exit(1);

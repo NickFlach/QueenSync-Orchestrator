@@ -63,6 +63,11 @@ router.post("/arms", requireOperator, async (req, res): Promise<void> => {
       resonanceSensitivity: body.resonanceSensitivity ?? 0.5,
       resonanceMode: (body.resonanceMode as string | undefined) ?? "auto",
       status: "idle",
+      // Bootstrap lastHeartbeat for arms with a heartbeatUrl so the
+      // staleness sweep applies uniformly: if the first probes fail, the
+      // arm is demoted after QUEENSYNC_ARM_STALE_MS (mirrors the seed-path
+      // behavior in lib/seed.ts).
+      lastHeartbeat: body.heartbeatUrl ? new Date() : null,
     })
     .returning();
   await recordLog({

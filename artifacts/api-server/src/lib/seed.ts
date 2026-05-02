@@ -56,7 +56,7 @@ const REAL_ARMS = [
     authMethod: "none",
     description:
       "Radio Ninja transmission engine. Plays tracks, narrates orations, fields requests, and reports stream health.",
-    resonanceTags: ["broadcast", "transmit", "story", "chord", "audience"],
+    resonanceTags: ["broadcast", "transmit", "story", "chord", "audience", "nats"],
     resonanceSensitivity: 0.55,
     resonanceMode: "passive",
   },

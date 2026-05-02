@@ -3,6 +3,7 @@ import { db, armsTable } from "@workspace/db";
 import { logger } from "./logger";
 import { broadcast } from "./ws";
 import { recordLog } from "./log";
+import { safeFetch, BlockedUrlError } from "./safe-fetch";
 
 /**
  * Default heartbeat scheduler interval (60s). Can be lowered in tests by
@@ -54,6 +55,10 @@ export interface HeartbeatSchedulerOptions {
 export async function probeHeartbeatUrls(
   opts: HeartbeatSchedulerOptions = {},
 ): Promise<string[]> {
+  // Default to safeFetch (URL-guarded, redirect: "manual") to preserve
+  // SSRF protections on every outbound probe. Tests can inject a fetcher
+  // (which bypasses url-guard) by passing { fetcher } explicitly.
+  const useSafe = opts.fetcher === undefined;
   const fetcher = opts.fetcher ?? fetch;
   const timeoutMs = opts.probeTimeoutMs ?? DEFAULT_HEARTBEAT_PROBE_TIMEOUT_MS;
   const rows = await db
@@ -70,10 +75,13 @@ export async function probeHeartbeatUrls(
       const url = row.heartbeatUrl;
       if (!url) return;
       try {
-        const r = await fetcher(url, {
+        const init: RequestInit = {
           method: "GET",
           signal: AbortSignal.timeout(timeoutMs),
-        });
+        };
+        const r = useSafe
+          ? await safeFetch(url, { ...init, context: `heartbeat:${row.id}` })
+          : await fetcher(url, init);
         if (!r.ok) {
           logger.debug(
             { armId: row.id, status: r.status, url },
@@ -94,6 +102,13 @@ export async function probeHeartbeatUrls(
           });
         }
       } catch (err) {
+        if (err instanceof BlockedUrlError) {
+          logger.warn(
+            { armId: row.id, url, reason: err.reason },
+            "heartbeat probe blocked by URL guard — leaving lastHeartbeat alone",
+          );
+          return;
+        }
         logger.debug(
           { armId: row.id, url, err: (err as Error).message },
           "heartbeat probe error — letting sweep handle staleness",

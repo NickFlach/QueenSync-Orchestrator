@@ -9,6 +9,7 @@ Type=simple
 User=opc
 Group=opc
 WorkingDirectory=/opt/queensync-oracle-admin
+Environment=NODE_ENV=production
 EnvironmentFile=/etc/queensync-oracle-admin.env
 ExecStart=/usr/bin/node --enable-source-maps /opt/queensync-oracle-admin/dist/index.mjs
 Restart=on-failure
