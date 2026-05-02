@@ -3,6 +3,7 @@ import { safeFetch, BlockedUrlError } from "./safe-fetch";
 import {
   getLastSuccess,
   setLastSuccess,
+  touchLastSuccess,
 } from "./adapter-cache";
 import type { AdapterEventOut, AdapterMode } from "./adapters-shared";
 
@@ -449,8 +450,11 @@ export async function radioPullEvents(
   if (anyOk) {
     // Successful fetch (even if every endpoint returned an empty array) is
     // still "live" — never silently fall back to mock data on a healthy
-    // endpoint. We only cache when there is at least one event.
+    // endpoint. Cache events when present; otherwise just touch
+    // lastSuccessAt so a later failure can still serve the previous
+    // non-empty snapshot.
     if (events.length > 0) setLastSuccess("radio", events);
+    else touchLastSuccess("radio");
     return {
       mode: "live",
       events,
@@ -559,6 +563,8 @@ export async function observatoryPullEvents(): Promise<AdapterPullOut> {
     // silently fall back to mock on a healthy endpoint.
     if (events.length > 0) {
       setLastSuccess("observatory", events, { metricsSuppressed });
+    } else {
+      touchLastSuccess("observatory", { metricsSuppressed });
     }
     return {
       mode: "live",
