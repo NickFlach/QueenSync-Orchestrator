@@ -1,5 +1,11 @@
+import { useEffect } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  MutationCache,
+  QueryCache,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Shell } from "@/components/layout/Shell";
@@ -13,8 +19,43 @@ import MemoryGate from "@/pages/memory";
 import ResonanceFields from "@/pages/resonance";
 import Adapters from "@/pages/adapters";
 import ExecutionLog from "@/pages/logs";
+import { AuthProvider, useAuth } from "@/lib/auth";
+import { LoginScreen } from "@/components/login-screen";
 
-const queryClient = new QueryClient();
+let pendingAuthRefresh: (() => void) | null = null;
+
+function isUnauthorized(err: unknown): boolean {
+  const status = (err as { status?: number } | null)?.status;
+  return status === 401 || status === 403;
+}
+
+function maybeTriggerAuthRefresh(err: unknown) {
+  if (isUnauthorized(err) && pendingAuthRefresh) {
+    pendingAuthRefresh();
+  }
+}
+
+const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: (err) => maybeTriggerAuthRefresh(err),
+  }),
+  mutationCache: new MutationCache({
+    onError: (err) => maybeTriggerAuthRefresh(err),
+  }),
+});
+
+function AuthRefreshBridge() {
+  const { refresh } = useAuth();
+  useEffect(() => {
+    pendingAuthRefresh = () => {
+      void refresh();
+    };
+    return () => {
+      pendingAuthRefresh = null;
+    };
+  }, [refresh]);
+  return null;
+}
 
 function Router() {
   return (
@@ -34,14 +75,41 @@ function Router() {
   );
 }
 
+function Gate() {
+  const { session, loading } = useAuth();
+
+  if (loading || !session) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-muted-foreground font-mono text-xs uppercase tracking-widest">
+        Connecting…
+      </div>
+    );
+  }
+
+  // No auth configured server-side → fully open demo mode.
+  if (!session.authConfigured) {
+    return <Router />;
+  }
+
+  // Auth configured but not signed in → show login screen.
+  if (!session.role) {
+    return <LoginScreen />;
+  }
+
+  return <Router />;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
+        <AuthProvider>
+          <AuthRefreshBridge />
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Gate />
+          </WouterRouter>
+          <Toaster />
+        </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

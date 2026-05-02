@@ -9,6 +9,9 @@ import {
   AudioWaveform,
   Terminal,
   Activity,
+  LogOut,
+  Shield,
+  Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -16,6 +19,8 @@ import {
   getHealthCheckQueryKey,
 } from "@workspace/api-client-react";
 import { useQueenSyncSocket } from "@/hooks/use-queensync-ws";
+import { useAuth } from "@/lib/auth";
+import { Button } from "@/components/ui/button";
 
 interface ShellProps {
   children: ReactNode;
@@ -41,6 +46,9 @@ export function Shell({ children }: ShellProps) {
     },
   });
   const { status: wsStatus } = useQueenSyncSocket();
+  const { session, logout } = useAuth();
+  const role = session?.role ?? null;
+  const authConfigured = session?.authConfigured ?? false;
 
   return (
     <div className="flex h-screen w-full bg-background text-foreground overflow-hidden font-mono selection:bg-primary/30">
@@ -116,6 +124,41 @@ export function Shell({ children }: ShellProps) {
             <span className="text-muted-foreground/70 uppercase tracking-wider">
               ws · {wsStatus}
             </span>
+          </div>
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/30">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider">
+              {role === "operator" ? (
+                <Shield className="w-3 h-3 text-primary" />
+              ) : role === "viewer" ? (
+                <Eye className="w-3 h-3 text-yellow-400" />
+              ) : (
+                <Eye className="w-3 h-3 text-muted-foreground" />
+              )}
+              <span
+                className={cn(
+                  role === "operator"
+                    ? "text-primary"
+                    : role === "viewer"
+                      ? "text-yellow-400"
+                      : "text-muted-foreground/70",
+                )}
+                data-testid="text-role"
+              >
+                {!authConfigured ? "open" : (role ?? "—")}
+              </span>
+            </div>
+            {authConfigured && role && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
+                onClick={() => void logout()}
+                data-testid="button-logout"
+              >
+                <LogOut className="w-3 h-3 mr-1" />
+                Sign out
+              </Button>
+            )}
           </div>
         </div>
       </aside>

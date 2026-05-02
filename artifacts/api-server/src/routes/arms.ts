@@ -12,6 +12,7 @@ import { recordLog } from "../lib/log";
 import { broadcast } from "../lib/ws";
 import { validateOutboundUrl, logBlockedUrl } from "../lib/url-guard";
 import { safeFetch, BlockedUrlError } from "../lib/safe-fetch";
+import { requireOperator } from "../lib/auth";
 
 const router: IRouter = Router();
 
@@ -23,7 +24,7 @@ router.get("/arms", async (_req, res): Promise<void> => {
   res.json(rows);
 });
 
-router.post("/arms", async (req, res): Promise<void> => {
+router.post("/arms", requireOperator, async (req, res): Promise<void> => {
   const parsed = OnboardArmBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -97,7 +98,7 @@ router.get("/arms/:id", async (req, res): Promise<void> => {
   });
 });
 
-router.delete("/arms/:id", async (req, res): Promise<void> => {
+router.delete("/arms/:id", requireOperator, async (req, res): Promise<void> => {
   const id = String(req.params.id);
   const [removed] = await db
     .delete(armsTable)
@@ -118,7 +119,7 @@ router.delete("/arms/:id", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
-router.post("/arms/:id/heartbeat", async (req, res): Promise<void> => {
+router.post("/arms/:id/heartbeat", requireOperator, async (req, res): Promise<void> => {
   const id = String(req.params.id);
   const [updated] = await db
     .update(armsTable)
@@ -142,7 +143,7 @@ router.post("/arms/:id/heartbeat", async (req, res): Promise<void> => {
   res.json(updated);
 });
 
-router.post("/arms/:id/test-connection", async (req, res): Promise<void> => {
+router.post("/arms/:id/test-connection", requireOperator, async (req, res): Promise<void> => {
   const id = String(req.params.id);
   const [arm] = await db.select().from(armsTable).where(eq(armsTable.id, id));
   if (!arm) {

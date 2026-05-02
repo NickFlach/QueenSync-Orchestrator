@@ -7,7 +7,7 @@ import { recordLog } from "../lib/log";
 import { broadcast } from "../lib/ws";
 import { dispatchTask } from "../lib/router";
 import { evaluateMemory } from "../lib/memory-gate";
-import { verifyCallbackAuth } from "../lib/auth";
+import { verifyCallbackAuth, requireOperator } from "../lib/auth";
 
 const router: IRouter = Router();
 
@@ -19,7 +19,7 @@ router.get("/tasks", async (_req, res): Promise<void> => {
   res.json(rows);
 });
 
-router.post("/tasks", async (req, res): Promise<void> => {
+router.post("/tasks", requireOperator, async (req, res): Promise<void> => {
   const parsed = CreateTaskBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -62,7 +62,7 @@ router.get("/tasks/:id", async (req, res): Promise<void> => {
   res.json(task);
 });
 
-router.post("/tasks/:id/retry", async (req, res): Promise<void> => {
+router.post("/tasks/:id/retry", requireOperator, async (req, res): Promise<void> => {
   const id = String(req.params.id);
   const [task] = await db
     .select()

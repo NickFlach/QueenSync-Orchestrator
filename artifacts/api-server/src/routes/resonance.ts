@@ -18,6 +18,7 @@ import {
   loadResonance,
   resolveField,
 } from "../lib/resonance";
+import { requireOperator } from "../lib/auth";
 
 const router: IRouter = Router();
 
@@ -29,7 +30,7 @@ router.get("/resonance/active", async (_req, res): Promise<void> => {
   res.json(await listResonanceFields(true));
 });
 
-router.post("/resonance", async (req, res): Promise<void> => {
+router.post("/resonance", requireOperator, async (req, res): Promise<void> => {
   const parsed = CreateResonanceBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -62,7 +63,7 @@ router.post("/resonance", async (req, res): Promise<void> => {
   res.status(201).json(full);
 });
 
-router.post("/resonance/:id/respond", async (req, res): Promise<void> => {
+router.post("/resonance/:id/respond", requireOperator, async (req, res): Promise<void> => {
   const id = String(req.params.id);
   const parsed = RespondResonanceBody.safeParse(req.body);
   if (!parsed.success) {
@@ -97,7 +98,7 @@ router.post("/resonance/:id/respond", async (req, res): Promise<void> => {
   res.json(updated);
 });
 
-router.post("/resonance/:id/resolve", async (req, res): Promise<void> => {
+router.post("/resonance/:id/resolve", requireOperator, async (req, res): Promise<void> => {
   const id = String(req.params.id);
   const parsed = ResolveResonanceBody.safeParse(req.body ?? {});
   const strategy =

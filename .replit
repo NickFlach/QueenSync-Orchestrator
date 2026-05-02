@@ -30,3 +30,12 @@ externalPort = 8081
 [[ports]]
 localPort = 18197
 externalPort = 3000
+
+[userenv]
+
+[userenv.development]
+QUEENSYNC_OPERATOR_TOKEN = "test-op-token-123"
+QUEENSYNC_VIEWER_TOKEN = "test-vw-token-456"
+QUEENSYNC_OPERATOR_PASSWORD = "op-pass-test"
+QUEENSYNC_VIEWER_PASSWORD = "vw-pass-test"
+QUEENSYNC_SESSION_SECRET = "test-session-secret-do-not-use-in-prod-12345678"

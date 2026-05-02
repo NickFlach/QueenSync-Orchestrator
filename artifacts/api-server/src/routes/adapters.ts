@@ -18,6 +18,7 @@ import { recordLog } from "../lib/log";
 import { broadcast } from "../lib/ws";
 import { autoLocalResonance } from "../lib/resonance";
 import { dispatchTask } from "../lib/router";
+import { requireOperator } from "../lib/auth";
 
 const router: IRouter = Router();
 
@@ -39,7 +40,7 @@ router.get("/adapters/radio/signals", async (_req, res): Promise<void> => {
   res.json(lastRadio.events);
 });
 
-router.post("/adapters/radio/pull", async (_req, res): Promise<void> => {
+router.post("/adapters/radio/pull", requireOperator, async (_req, res): Promise<void> => {
   const result = await radioPullEvents();
   lastRadio = result;
   const conv = await convertEventsToSignalsAndResonance(
@@ -85,6 +86,7 @@ router.get(
 
 router.post(
   "/adapters/observatory/pull",
+  requireOperator,
   async (_req, res): Promise<void> => {
     const result = await observatoryPullEvents();
     lastObservatory = result;

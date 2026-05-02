@@ -13,10 +13,11 @@ import { broadcast } from "../lib/ws";
 import { dispatchTask } from "../lib/router";
 import { autoLocalResonance, resolveField } from "../lib/resonance";
 import { evaluateMemory } from "../lib/memory-gate";
+import { requireOperator } from "../lib/auth";
 
 const router: IRouter = Router();
 
-router.post("/demo/wake-kannaktopus", async (_req, res): Promise<void> => {
+router.post("/demo/wake-kannaktopus", requireOperator, async (_req, res): Promise<void> => {
   const created: string[] = [];
   const [arm] = await db
     .select()
@@ -63,7 +64,7 @@ router.post("/demo/wake-kannaktopus", async (_req, res): Promise<void> => {
   res.json({ created, message: "Kannaktopus arms reaching outward." });
 });
 
-router.post("/demo/dream-lite", async (_req, res): Promise<void> => {
+router.post("/demo/dream-lite", requireOperator, async (_req, res): Promise<void> => {
   const recent = await db
     .select()
     .from(memoryEventsTable)
@@ -94,7 +95,7 @@ router.post("/demo/dream-lite", async (_req, res): Promise<void> => {
   });
 });
 
-router.post("/demo/resonance-storm", async (_req, res): Promise<void> => {
+router.post("/demo/resonance-storm", requireOperator, async (_req, res): Promise<void> => {
   const created: string[] = [];
   const intents: Array<{ intent: string; tags: string[] }> = [
     {

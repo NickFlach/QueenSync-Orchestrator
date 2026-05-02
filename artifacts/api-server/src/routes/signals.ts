@@ -7,6 +7,7 @@ import { recordLog } from "../lib/log";
 import { broadcast } from "../lib/ws";
 import { dispatchTask } from "../lib/router";
 import { autoLocalResonance } from "../lib/resonance";
+import { requireOperator } from "../lib/auth";
 
 const router: IRouter = Router();
 
@@ -18,7 +19,7 @@ router.get("/signals", async (_req, res): Promise<void> => {
   res.json(rows);
 });
 
-router.post("/signals", async (req, res): Promise<void> => {
+router.post("/signals", requireOperator, async (req, res): Promise<void> => {
   const parsed = InjectSignalBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });

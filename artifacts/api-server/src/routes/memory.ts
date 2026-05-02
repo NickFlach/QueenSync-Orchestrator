@@ -3,6 +3,7 @@ import { desc } from "drizzle-orm";
 import { db, memoryEventsTable } from "@workspace/db";
 import { EvaluateMemoryBody } from "@workspace/api-zod";
 import { evaluateMemory } from "../lib/memory-gate";
+import { requireOperator } from "../lib/auth";
 
 const router: IRouter = Router();
 
@@ -15,7 +16,7 @@ router.get("/memory", async (_req, res): Promise<void> => {
   res.json(rows);
 });
 
-router.post("/memory/evaluate", async (req, res): Promise<void> => {
+router.post("/memory/evaluate", requireOperator, async (req, res): Promise<void> => {
   const parsed = EvaluateMemoryBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
