@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   useListTasks,
   useRetryTask,
@@ -11,6 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  FilterBar,
+  useFilterState,
+  uniqueSorted,
+  type FilterField,
+} from "@/components/filter-bar";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +41,66 @@ export default function TasksRouter() {
   const [intent, setIntent] = useState("");
   const [capability, setCapability] = useState("build");
   const [priority, setPriority] = useState(5);
+
+  const allTasks = (tasks ?? []) as Task[];
+  const filterFields: FilterField[] = useMemo(
+    () => [
+      {
+        kind: "select",
+        key: "status",
+        label: "Status",
+        placeholder: "All statuses",
+        options: [
+          { value: "pending", label: "pending" },
+          { value: "active", label: "active" },
+          { value: "completed", label: "completed" },
+          { value: "failed", label: "failed" },
+        ],
+      },
+      {
+        kind: "select",
+        key: "agent",
+        label: "Assigned",
+        placeholder: "All agents",
+        options: uniqueSorted(allTasks.map((t) => t.assignedArmId)).map(
+          (v) => ({ value: v, label: v }),
+        ),
+      },
+      {
+        kind: "select",
+        key: "source",
+        label: "Source",
+        placeholder: "All sources",
+        options: uniqueSorted(allTasks.map((t) => t.source)).map((v) => ({
+          value: v,
+          label: v,
+        })),
+      },
+      {
+        kind: "text",
+        key: "q",
+        label: "Search intent",
+        placeholder: "search intent or capability…",
+      },
+    ],
+    [allTasks],
+  );
+  const filter = useFilterState(filterFields);
+  const visibleTasks = useMemo(() => {
+    const q = filter.values.q?.trim().toLowerCase();
+    return allTasks.filter((t) => {
+      if (filter.values.status && t.status !== filter.values.status) return false;
+      if (filter.values.agent && (t.assignedArmId ?? "") !== filter.values.agent)
+        return false;
+      if (filter.values.source && t.source !== filter.values.source) return false;
+      if (q) {
+        const hay =
+          `${t.intent} ${t.requiredCapability} ${t.id} ${t.result ?? ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [allTasks, filter.values]);
 
   const retryMutation = useRetryTask({
     mutation: {
@@ -160,8 +226,18 @@ export default function TasksRouter() {
         </Dialog>
       </div>
 
+      <FilterBar
+        fields={filterFields}
+        values={filter.values}
+        setValue={filter.setValue}
+        clearAll={filter.clearAll}
+        hasActive={filter.hasActive}
+        testIdPrefix="tasks-filter"
+        resultCount={visibleTasks.length}
+      />
+
       <div className="grid gap-3">
-        {tasks?.map((task: Task) => (
+        {visibleTasks.map((task: Task) => (
           <Card
             key={task.id}
             className="bg-card border-border/50 rounded-none border-l-2 data-[status=failed]:border-l-destructive data-[status=completed]:border-l-primary data-[status=pending]:border-l-muted"
@@ -213,10 +289,14 @@ export default function TasksRouter() {
             </CardContent>
           </Card>
         ))}
-        {tasks?.length === 0 && (
+        {visibleTasks.length === 0 && (
           <div className="text-center p-12 border border-dashed border-border/50">
             <ListTodo className="w-8 h-8 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">No tasks in the router.</p>
+            <p className="text-muted-foreground">
+              {allTasks.length === 0
+                ? "No tasks in the router."
+                : "No tasks match the current filters."}
+            </p>
           </div>
         )}
       </div>

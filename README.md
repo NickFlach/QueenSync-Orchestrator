@@ -347,21 +347,47 @@ collision and must stay in place.
 
 Every signal (manual injection, adapter pull, or programmatic) becomes a
 routable task. The capability is taken from `payload.capability` if present,
-otherwise inferred from the signal `type`:
+otherwise inferred from the signal `type`. Resonance-bearing signals also
+open a resonance field whose tags follow the v1.0 tag vocabulary so the
+field reads the same regardless of whether the signal arrived from the live
+adapter or was injected manually:
 
-| Signal type           | Default capability |
-|-----------------------|--------------------|
-| `build_request`       | `build`            |
-| `radio_transmission`  | `transmit`         |
-| `openclaw_artifact`   | `artifact`         |
-| `memory_anomaly`      | `audit` (+ resonance) |
-| `governance_alert`    | `audit` (+ resonance) |
-| `observation_event`   | `observe` (+ resonance) |
-| `other`               | `build`            |
+| Signal type           | Default capability     | Resonance field tags                                |
+|-----------------------|------------------------|-----------------------------------------------------|
+| `build_request`       | `build`                | —                                                   |
+| `radio_transmission`  | `transmit`             | `radio`, `signal`, `analysis` (+ subtype, capability) |
+| `openclaw_artifact`   | `artifact`             | —                                                   |
+| `memory_anomaly`      | `audit` (+ resonance)  | `observation`, `anomaly`, `audit` (+ capability)    |
+| `governance_alert`    | `audit` (+ resonance)  | `observation`, `anomaly`, `audit` (+ capability)    |
+| `observation_event`   | `observe` (+ resonance)| `observation`, `anomaly`, `pattern` (+ subtype, capability) |
+| `other`               | `build`                | —                                                   |
 
 Adapter pulls (`/adapters/radio/pull`, `/adapters/observatory/pull`) emit one
 signal + one task + one resonance field per event so every external pulse is
-both routed and openly resonant.
+both routed and openly resonant. Radio pulls inject the
+`radio / signal / analysis` base tags plus the per-event subtype
+(`radio.now_playing`, `radio.swarm`, `radio.dream`, etc.). Observatory
+pulls inject the `observation / anomaly / pattern` base tags plus the
+per-event subtype (`observation.consciousness`, `observation.anomaly`,
+etc.). Operator-supplied `payload.tags` are merged in alongside the base
+tags rather than replacing them.
+
+## Console filters
+
+Every operator-facing list page in the Queen Console has a filter bar that
+reads and writes URL query params, so a filtered view (`?status=failed&q=chord`)
+can be shared as a link:
+
+| Page              | Filters                                              |
+|-------------------|------------------------------------------------------|
+| `/tasks`          | status · assigned agent · source · search intent     |
+| `/signals`        | type · source · status (received / converted) · search payload |
+| `/logs`           | event type · source · search summary                 |
+| `/memory`         | status (approved / rejected / compacted) · agent · tag |
+| `/resonance`      | status (active / resolved / expired) · tag · search intent |
+
+All filtering happens in the browser against the data already returned by
+the existing list endpoints — no API change is required.
 
 ## Hologram TV — live constellation view
 

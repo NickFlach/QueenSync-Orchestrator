@@ -103,9 +103,21 @@ router.post("/signals", requireOperator, async (req, res): Promise<void> => {
       typeof body.payload?.intent === "string"
         ? (body.payload.intent as string)
         : summary;
-    const tags = Array.isArray(body.payload?.tags)
+    // Per ADR-002 Wave 1: adapter-style signals injected manually (radio /
+    // observatory / governance / memory anomaly) carry the same base tag
+    // vocabulary the live adapters emit so resonance fields read the same
+    // way regardless of how they were opened.
+    const ADAPTER_BASE_TAGS: Record<string, string[]> = {
+      radio_transmission: ["radio", "signal", "analysis"],
+      observation_event: ["observation", "anomaly", "pattern"],
+      memory_anomaly: ["observation", "anomaly", "audit"],
+      governance_alert: ["observation", "anomaly", "audit"],
+    };
+    const customTags = Array.isArray(body.payload?.tags)
       ? (body.payload.tags as string[])
-      : [body.type, capability];
+      : [];
+    const baseTags = ADAPTER_BASE_TAGS[body.type] ?? [body.type, capability];
+    const tags = Array.from(new Set([...baseTags, ...customTags, capability]));
     const [field] = await db
       .insert(resonanceFieldsTable)
       .values({

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   useListSignals,
   useInjectSignal,
@@ -35,6 +35,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Radio, Plus, AlertTriangle, EyeOff, FlaskConical } from "lucide-react";
+import {
+  FilterBar,
+  useFilterState,
+  uniqueSorted,
+  type FilterField,
+} from "@/components/filter-bar";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
@@ -143,6 +149,63 @@ export default function SignalsIngestion() {
   const [payload, setPayload] = useState(
     '{"summary":"Compose a chord","capability":"transmit"}',
   );
+
+  const allSignals = (signals ?? []) as Signal[];
+  const filterFields: FilterField[] = useMemo(
+    () => [
+      {
+        kind: "select",
+        key: "type",
+        label: "Type",
+        placeholder: "All types",
+        options: SIGNAL_TYPES.map((t) => ({ value: t, label: t })),
+      },
+      {
+        kind: "select",
+        key: "source",
+        label: "Source",
+        placeholder: "All sources",
+        options: uniqueSorted(allSignals.map((s) => s.source)).map((v) => ({
+          value: v,
+          label: v,
+        })),
+      },
+      {
+        kind: "select",
+        key: "status",
+        label: "Status",
+        placeholder: "All statuses",
+        options: [
+          { value: "received", label: "received" },
+          { value: "converted", label: "converted" },
+          { value: "ignored", label: "ignored" },
+        ],
+      },
+      {
+        kind: "text",
+        key: "q",
+        label: "Search payload",
+        placeholder: "search payload, id, type…",
+      },
+    ],
+    [allSignals],
+  );
+  const filter = useFilterState(filterFields);
+  const visibleSignals = useMemo(() => {
+    const q = filter.values.q?.trim().toLowerCase();
+    return allSignals.filter((s) => {
+      if (filter.values.type && s.type !== filter.values.type) return false;
+      if (filter.values.source && (s.source ?? "") !== filter.values.source)
+        return false;
+      if (filter.values.status && s.status !== filter.values.status) return false;
+      if (q) {
+        const hay =
+          `${s.type} ${s.id} ${s.source ?? ""} ${JSON.stringify(s.payload ?? {})}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [allSignals, filter.values]);
 
   const inject = useInjectSignal({
     mutation: {
@@ -278,8 +341,18 @@ export default function SignalsIngestion() {
         </CardContent>
       </Card>
 
+      <FilterBar
+        fields={filterFields}
+        values={filter.values}
+        setValue={filter.setValue}
+        clearAll={filter.clearAll}
+        hasActive={filter.hasActive}
+        testIdPrefix="signals-filter"
+        resultCount={visibleSignals.length}
+      />
+
       <div className="space-y-3">
-        {signals?.map((signal: Signal) => (
+        {visibleSignals.map((signal: Signal) => (
           <Card key={signal.id} className="bg-card border-border/50 font-mono">
             <CardContent className="p-4">
               <div className="flex justify-between items-start mb-2">
@@ -322,10 +395,14 @@ export default function SignalsIngestion() {
             </CardContent>
           </Card>
         ))}
-        {signals?.length === 0 && (
+        {visibleSignals.length === 0 && (
           <div className="text-center p-12 border border-dashed border-border/50">
             <Radio className="w-8 h-8 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">No signals received.</p>
+            <p className="text-muted-foreground">
+              {allSignals.length === 0
+                ? "No signals received."
+                : "No signals match the current filters."}
+            </p>
           </div>
         )}
       </div>

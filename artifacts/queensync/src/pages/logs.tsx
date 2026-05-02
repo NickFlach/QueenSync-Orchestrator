@@ -1,15 +1,71 @@
+import { useMemo } from "react";
 import {
   useListLogs,
   LogEntry,
+  LogEntryEventType,
   getListLogsQueryKey,
 } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Terminal, ShieldAlert, User, Globe } from "lucide-react";
+import {
+  FilterBar,
+  useFilterState,
+  uniqueSorted,
+  type FilterField,
+} from "@/components/filter-bar";
 
 export default function ExecutionLog() {
   const { data: logs, isLoading } = useListLogs({
     query: { refetchInterval: 3000, queryKey: getListLogsQueryKey() },
   });
+
+  const allLogs = (logs ?? []) as LogEntry[];
+  const filterFields: FilterField[] = useMemo(
+    () => [
+      {
+        kind: "select",
+        key: "eventType",
+        label: "Event",
+        placeholder: "All events",
+        options: Object.values(LogEntryEventType).map((v) => ({
+          value: v,
+          label: v,
+        })),
+      },
+      {
+        kind: "select",
+        key: "source",
+        label: "Source",
+        placeholder: "All sources",
+        options: uniqueSorted(allLogs.map((l) => l.source)).map((v) => ({
+          value: v,
+          label: v,
+        })),
+      },
+      {
+        kind: "text",
+        key: "q",
+        label: "Search summary",
+        placeholder: "search summary, source…",
+      },
+    ],
+    [allLogs],
+  );
+  const filter = useFilterState(filterFields);
+  const visibleLogs = useMemo(() => {
+    const q = filter.values.q?.trim().toLowerCase();
+    return allLogs.filter((l) => {
+      if (filter.values.eventType && l.eventType !== filter.values.eventType)
+        return false;
+      if (filter.values.source && (l.source ?? "") !== filter.values.source)
+        return false;
+      if (q) {
+        const hay = `${l.summary} ${l.eventType} ${l.source ?? ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [allLogs, filter.values]);
 
   if (isLoading) {
     return (
@@ -28,12 +84,24 @@ export default function ExecutionLog() {
         </h1>
       </div>
 
+      <div className="mb-4 shrink-0">
+        <FilterBar
+          fields={filterFields}
+          values={filter.values}
+          setValue={filter.setValue}
+          clearAll={filter.clearAll}
+          hasActive={filter.hasActive}
+          testIdPrefix="logs-filter"
+          resultCount={visibleLogs.length}
+        />
+      </div>
+
       <div className="flex-1 bg-card border border-border/50 rounded-lg overflow-hidden flex flex-col font-mono text-sm">
         <div className="bg-background px-4 py-2 border-b border-border/50 text-muted-foreground text-xs uppercase flex items-center gap-2">
           <Terminal className="w-4 h-4" /> System Stream Active · audit trail
         </div>
         <div className="p-4 overflow-y-auto flex-1 space-y-1">
-          {logs?.map((log: LogEntry) => {
+          {visibleLogs.map((log: LogEntry) => {
             const meta = (log.metadata ?? {}) as Record<string, unknown>;
             const actor = typeof meta.actor === "string" ? meta.actor : null;
             const ip = typeof meta.ip === "string" ? meta.ip : null;
@@ -114,9 +182,11 @@ export default function ExecutionLog() {
               </div>
             );
           })}
-          {logs?.length === 0 && (
+          {visibleLogs.length === 0 && (
             <div className="text-muted-foreground text-center py-8">
-              No log entries found.
+              {allLogs.length === 0
+                ? "No log entries found."
+                : "No log entries match the current filters."}
             </div>
           )}
         </div>

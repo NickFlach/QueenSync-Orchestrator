@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   useListResonance,
   useCreateResonance,
@@ -25,6 +25,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { AudioWaveform, Plus, GitMerge, Sparkles } from "lucide-react";
+import {
+  FilterBar,
+  useFilterState,
+  uniqueSorted,
+  type FilterField,
+} from "@/components/filter-bar";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
@@ -45,6 +51,52 @@ export default function ResonanceFields() {
       queryKey: getListActiveResonanceQueryKey(),
     });
   };
+
+  const allResonance = (resonance ?? []) as Resonance[];
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of allResonance) for (const t of r.tags) set.add(t);
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [allResonance]);
+  const filterFields: FilterField[] = useMemo(
+    () => [
+      {
+        kind: "select",
+        key: "status",
+        label: "Status",
+        placeholder: "All statuses",
+        options: [
+          { value: "active", label: "active" },
+          { value: "resolved", label: "resolved" },
+          { value: "expired", label: "expired" },
+        ],
+      },
+      {
+        kind: "select",
+        key: "tag",
+        label: "Tag",
+        placeholder: "All tags",
+        options: allTags.map((v) => ({ value: v, label: v })),
+      },
+      {
+        kind: "text",
+        key: "q",
+        label: "Search intent",
+        placeholder: "search intent…",
+      },
+    ],
+    [allTags],
+  );
+  const filter = useFilterState(filterFields);
+  const visibleResonance = useMemo(() => {
+    const q = filter.values.q?.trim().toLowerCase();
+    return allResonance.filter((r) => {
+      if (filter.values.status && r.status !== filter.values.status) return false;
+      if (filter.values.tag && !r.tags.includes(filter.values.tag)) return false;
+      if (q && !r.intent.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [allResonance, filter.values]);
 
   const create = useCreateResonance({
     mutation: {
@@ -178,8 +230,18 @@ export default function ResonanceFields() {
         </Dialog>
       </div>
 
+      <FilterBar
+        fields={filterFields}
+        values={filter.values}
+        setValue={filter.setValue}
+        clearAll={filter.clearAll}
+        hasActive={filter.hasActive}
+        testIdPrefix="resonance-filter"
+        resultCount={visibleResonance.length}
+      />
+
       <div className="grid gap-4">
-        {resonance?.map((res: Resonance) => (
+        {visibleResonance.map((res: Resonance) => (
           <Card key={res.id} className="bg-card border-border/50">
             <CardContent className="p-5">
               <div className="flex justify-between items-start mb-4">
@@ -293,10 +355,14 @@ export default function ResonanceFields() {
             </CardContent>
           </Card>
         ))}
-        {resonance?.length === 0 && (
+        {visibleResonance.length === 0 && (
           <div className="text-center p-12 border border-dashed border-border/50">
             <AudioWaveform className="w-8 h-8 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">No resonance fields opened.</p>
+            <p className="text-muted-foreground">
+              {allResonance.length === 0
+                ? "No resonance fields opened."
+                : "No resonance fields match the current filters."}
+            </p>
           </div>
         )}
       </div>

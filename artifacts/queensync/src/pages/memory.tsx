@@ -9,6 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BrainCircuit, Layers, Trash2 } from "lucide-react";
+import {
+  FilterBar,
+  useFilterState,
+  uniqueSorted,
+  type FilterField,
+} from "@/components/filter-bar";
 
 function MemoryRow({ event }: { event: MemoryEvent }) {
   const isCompression = event.type === "dream_lite_compression";
@@ -144,6 +150,70 @@ export default function MemoryGate() {
     }));
   }, [memory]);
 
+  const allMemory = (memory ?? []) as MemoryEvent[];
+  const filterFields: FilterField[] = useMemo(
+    () => [
+      {
+        kind: "select",
+        key: "decision",
+        label: "Status",
+        placeholder: "All decisions",
+        options: [
+          { value: "approved", label: "approved" },
+          { value: "rejected", label: "rejected" },
+          { value: "duplicate", label: "compacted (duplicate)" },
+        ],
+      },
+      {
+        kind: "select",
+        key: "agent",
+        label: "Agent",
+        placeholder: "All agents",
+        options: uniqueSorted(allMemory.map((m) => m.agentId)).map((v) => ({
+          value: v,
+          label: v,
+        })),
+      },
+      {
+        kind: "select",
+        key: "tag",
+        label: "Tag",
+        placeholder: "All tags",
+        options: uniqueSorted(allMemory.map((m) => m.tag)).map((v) => ({
+          value: v,
+          label: v,
+        })),
+      },
+      {
+        kind: "text",
+        key: "q",
+        label: "Search content",
+        placeholder: "search content, tag…",
+      },
+    ],
+    [allMemory],
+  );
+  const filter = useFilterState(filterFields);
+  const matchesFilter = useMemo(() => {
+    const q = filter.values.q?.trim().toLowerCase();
+    return (m: MemoryEvent) => {
+      if (filter.values.decision && m.decision !== filter.values.decision)
+        return false;
+      if (filter.values.agent && (m.agentId ?? "") !== filter.values.agent)
+        return false;
+      if (filter.values.tag && m.tag !== filter.values.tag) return false;
+      if (q) {
+        const hay = `${m.content} ${m.tag} ${m.type}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    };
+  }, [filter.values]);
+  const visibleGrouped = useMemo(
+    () => grouped.filter(({ parent }) => matchesFilter(parent)),
+    [grouped, matchesFilter],
+  );
+
   if (isLoading) {
     return (
       <div className="p-6 space-y-4">
@@ -186,8 +256,18 @@ export default function MemoryGate() {
         </div>
       </div>
 
+      <FilterBar
+        fields={filterFields}
+        values={filter.values}
+        setValue={filter.setValue}
+        clearAll={filter.clearAll}
+        hasActive={filter.hasActive}
+        testIdPrefix="memory-filter"
+        resultCount={visibleGrouped.length}
+      />
+
       <div className="space-y-3">
-        {grouped.map(({ parent, children }) => (
+        {visibleGrouped.map(({ parent, children }) => (
           <div key={parent.id} className="space-y-2">
             <MemoryRow event={parent} />
             {children.length > 0 && (
@@ -202,10 +282,14 @@ export default function MemoryGate() {
             )}
           </div>
         ))}
-        {grouped.length === 0 && (
+        {visibleGrouped.length === 0 && (
           <div className="text-center p-12 border border-dashed border-border/50">
             <BrainCircuit className="w-8 h-8 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">Memory bank is empty.</p>
+            <p className="text-muted-foreground">
+              {allMemory.length === 0
+                ? "Memory bank is empty."
+                : "No memory events match the current filters."}
+            </p>
           </div>
         )}
       </div>
