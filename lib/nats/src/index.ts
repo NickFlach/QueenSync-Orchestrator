@@ -36,6 +36,12 @@ export const SUBJECTS = {
   QUEEN_DREAM_END: "queen.event.dream.end",
   QUEEN_JOIN: "queen.event.join",
   QUEEN_LEAVE: "queen.event.leave",
+  /**
+   * Per-agent phase signals from the queen sync layer. Documented at
+   * https://radio.ninja-portal.com/agent as `QUEEN.phase.*` — wildcard
+   * subscription so we capture every agent's phase update.
+   */
+  QUEEN_PHASE: "QUEEN.phase.*",
   /** Prefix for REQ/REPLY arm pings: KANNAKA.ask.<armId> */
   ASK_PREFIX: "KANNAKA.ask",
 } as const;
@@ -50,6 +56,7 @@ export const ALL_SUBSCRIBE_SUBJECTS: readonly string[] = [
   SUBJECTS.QUEEN_DREAM_END,
   SUBJECTS.QUEEN_JOIN,
   SUBJECTS.QUEEN_LEAVE,
+  SUBJECTS.QUEEN_PHASE,
 ];
 
 export type NatsConnectionState =
@@ -133,6 +140,28 @@ function encodePayload(data: unknown): Uint8Array {
 // In-memory client (tests)
 // ───────────────────────────────────────────────────────────────────────────
 
+/**
+ * Match a concrete NATS subject against a possibly-wildcarded pattern
+ * (`*` matches a single token, `>` matches one or more trailing tokens).
+ * Exported for tests; mirrors NATS server semantics closely enough for
+ * the in-memory bus to route `QUEEN.phase.*` style subscriptions.
+ */
+export function subjectMatches(pattern: string, subject: string): boolean {
+  if (pattern === subject) return true;
+  if (!pattern.includes("*") && !pattern.includes(">")) return false;
+  const pp = pattern.split(".");
+  const ss = subject.split(".");
+  for (let i = 0; i < pp.length; i++) {
+    const p = pp[i]!;
+    if (p === ">") return ss.length >= i + 1;
+    const s = ss[i];
+    if (s === undefined) return false;
+    if (p === "*") continue;
+    if (p !== s) return false;
+  }
+  return pp.length === ss.length;
+}
+
 export function createInMemoryNatsClient(): NatsClient & {
   /** Test helper: returns the count of currently registered handlers per subject. */
   _subscriberCount(subject: string): number;
@@ -190,8 +219,6 @@ export function createInMemoryNatsClient(): NatsClient & {
       };
     },
     publish(subject, data, opts): void {
-      const set = handlers.get(subject);
-      if (!set) return;
       const raw = encodePayload(data);
       const msg: NatsMessage = {
         subject,
@@ -199,12 +226,19 @@ export function createInMemoryNatsClient(): NatsClient & {
         raw,
         reply: opts?.reply,
       };
-      // Snapshot to avoid mutation-during-iteration.
-      for (const h of Array.from(set)) {
-        try {
-          void h(msg);
-        } catch {
-          // handler errors should not crash the bus
+      // Walk every registered subscription and dispatch when its
+      // pattern matches the published subject. This makes wildcard
+      // subscriptions like `QUEEN.phase.*` route correctly under the
+      // in-memory client (tests + dev fake bus), matching real NATS
+      // server semantics.
+      for (const [pattern, set] of Array.from(handlers.entries())) {
+        if (!subjectMatches(pattern, subject)) continue;
+        for (const h of Array.from(set)) {
+          try {
+            void h(msg);
+          } catch {
+            // handler errors should not crash the bus
+          }
         }
       }
     },

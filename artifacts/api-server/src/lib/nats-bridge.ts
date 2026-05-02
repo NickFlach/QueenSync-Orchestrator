@@ -208,6 +208,37 @@ async function handleAbsorbAck(msg: NatsMessage): Promise<void> {
   }
 }
 
+async function handleQueenPhase(msg: NatsMessage): Promise<void> {
+  // Subject: QUEEN.phase.<agentId>
+  const p = asObj(msg.data);
+  const agentId =
+    msg.subject.split(".").slice(2).join(".") ||
+    String(p["agentId"] ?? p["armId"] ?? "unknown");
+  const phase = Number(p["phase"] ?? p["theta"] ?? 0);
+  const order = Number(p["order"] ?? p["orderParameter"] ?? 0);
+  const summary = `Queen phase: ${agentId} θ=${
+    Number.isFinite(phase) ? phase.toFixed(3) : "?"
+  }${order ? ` order=${order.toFixed(3)}` : ""}`;
+  const [signal] = await db
+    .insert(signalsTable)
+    .values({
+      id: nanoid(12),
+      type: "observation_event",
+      source: `nats:queen.phase:${agentId}`,
+      payload: {
+        ...p,
+        agentId,
+        phase,
+        order,
+        _summary: summary,
+        _natsSubject: msg.subject,
+      },
+      status: "received",
+    })
+    .returning();
+  broadcast({ type: "signal_received", data: signal });
+}
+
 async function handlePresence(msg: NatsMessage, kind: "join" | "leave"): Promise<void> {
   const p = asObj(msg.data);
   const armId = String(p["armId"] ?? p["id"] ?? p["agentId"] ?? "");
@@ -376,6 +407,7 @@ export async function startNatsBridge(
     SUBJECTS.QUEEN_LEAVE,
     safe(SUBJECTS.QUEEN_LEAVE, (m) => handlePresence(m, "leave")),
   );
+  client.subscribe(SUBJECTS.QUEEN_PHASE, safe(SUBJECTS.QUEEN_PHASE, handleQueenPhase));
 
   await client.connect();
   return client;

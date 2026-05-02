@@ -36,7 +36,7 @@ describe("runDispatch", () => {
 
     // Two calls: oration trigger + callback.
     assert.equal(calls.length, 2);
-    assert.match(calls[0]!.url, /\/admin\/oration\/now$/);
+    assert.match(calls[0]!.url, /\/api\/oration\/now$/);
     const cb = calls[1]!;
     assert.match(cb.url, /\/api\/tasks\/t-orate\/callback$/);
     const cbBody = JSON.parse(String(cb.init?.body ?? "{}"));
@@ -44,6 +44,34 @@ describe("runDispatch", () => {
     assert.match(cbBody.result, /oration triggered/);
     const cbHeaders = cb.init?.headers as Record<string, string>;
     assert.equal(cbHeaders["X-QueenSync-Signature"], "sha256=expected-completed");
+  });
+
+  it("trigger_oration_now → falls back to legacy /admin/oration/now on 404", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetcher = (async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      calls.push({ url: u, init });
+      if (u.endsWith("/api/oration/now")) {
+        return new Response("not found", { status: 404 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 202 });
+    }) as unknown as typeof fetch;
+    const payload: DispatchPayload = {
+      taskId: "t-orate-legacy",
+      requiredCapability: "trigger_oration_now",
+      callbackUrl: "https://queen.example.com/api/tasks/t-orate-legacy/callback",
+    };
+    await runDispatch(payload, silentLog, {
+      fetcher,
+      headers: { completedSignature: "sha256=ok", failedSignature: "sha256=fail" },
+    });
+    // primary 404 + legacy POST + callback = 3 calls
+    assert.equal(calls.length, 3);
+    assert.match(calls[0]!.url, /\/api\/oration\/now$/);
+    assert.match(calls[1]!.url, /\/admin\/oration\/now$/);
+    const cbBody = JSON.parse(String(calls[2]!.init?.body ?? "{}"));
+    assert.equal(cbBody.status, "completed");
+    assert.match(cbBody.result, /legacy/);
   });
 
   it("unknown capability → acks failed with explanation", async () => {

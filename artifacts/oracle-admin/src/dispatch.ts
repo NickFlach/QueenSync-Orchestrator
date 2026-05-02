@@ -46,16 +46,45 @@ const HANDLERS: Record<string, Handler> = {
   },
   trigger_oration_now: async (p, log, fetcher) => {
     const radio = process.env["RADIO_BASE_URL"] ?? "https://radio.ninja-portal.com";
-    const url = `${radio.replace(/\/$/, "")}/admin/oration/now`;
+    // Public contract per https://radio.ninja-portal.com/agent — `POST
+    // /api/oration/now` returns 202 and runs the compose → TTS → /stream
+    // queue → social-broadcast pipeline asynchronously. We try the
+    // documented `/api/oration/now` first and fall back to the legacy
+    // `/admin/oration/now` on 404/405 so older deployments that haven't
+    // adopted the new path keep working without an env override. An
+    // explicit RADIO_ORATION_TRIGGER_URL pins the URL and disables the
+    // fallback so the operator sees the real upstream error.
+    const explicit = process.env["RADIO_ORATION_TRIGGER_URL"] ?? "";
     const intent = p.intent ?? "Oration triggered by QueenSync";
-    const r = await fetcher(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ intent, taskId: p.taskId }),
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!r.ok) throw new Error(`radio /admin/oration/now → HTTP ${r.status}`);
-    log.info({ url, status: r.status }, "oration triggered");
+    const body = JSON.stringify({ intent, taskId: p.taskId });
+    const post = (u: string) =>
+      fetcher(u, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        signal: AbortSignal.timeout(5000),
+      });
+    if (explicit) {
+      const r = await post(explicit);
+      if (!r.ok) throw new Error(`radio oration trigger → HTTP ${r.status}`);
+      log.info({ url: explicit, status: r.status }, "oration triggered");
+      return `oration triggered (${r.status})`;
+    }
+    const primary = `${radio.replace(/\/$/, "")}/api/oration/now`;
+    const legacy = `${radio.replace(/\/$/, "")}/admin/oration/now`;
+    let r = await post(primary);
+    if (r.status === 404 || r.status === 405) {
+      log.warn(
+        { primary, status: r.status },
+        "oration primary path not found, trying legacy /admin/oration/now",
+      );
+      r = await post(legacy);
+      if (!r.ok) throw new Error(`radio oration trigger → HTTP ${r.status}`);
+      log.info({ url: legacy, status: r.status }, "oration triggered (legacy path)");
+      return `oration triggered via legacy /admin path (${r.status})`;
+    }
+    if (!r.ok) throw new Error(`radio oration trigger → HTTP ${r.status}`);
+    log.info({ url: primary, status: r.status }, "oration triggered");
     return `oration triggered (${r.status})`;
   },
   setOverride: async (p, log, fetcher) => {
@@ -76,20 +105,33 @@ const HANDLERS: Record<string, Handler> = {
     return `override(${target}=${value}) accepted`;
   },
   dream_trigger: async (p, log, fetcher) => {
-    const url = process.env["KANNAKA_DREAM_TRIGGER_URL"] ?? "";
-    if (!url) {
-      // Fall back to local systemctl unit
+    // Per https://radio.ninja-portal.com/agent the public dream trigger
+    // is `POST /api/dreams/trigger`. Honour an explicit override
+    // (KANNAKA_DREAM_TRIGGER_URL) for canary/staging deployments, then
+    // default to the radio surface, then finally fall back to the local
+    // systemd unit when neither is reachable.
+    const explicit = process.env["KANNAKA_DREAM_TRIGGER_URL"] ?? "";
+    const radio = process.env["RADIO_BASE_URL"] ?? "https://radio.ninja-portal.com";
+    const url = explicit || `${radio.replace(/\/$/, "")}/api/dreams/trigger`;
+    try {
+      const r = await fetcher(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId: p.taskId, source: "queensync" }),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!r.ok) throw new Error(`dream trigger → HTTP ${r.status}`);
+      log.info({ url, status: r.status }, "dream cycle triggered");
+      return `dream cycle triggered (${r.status})`;
+    } catch (err) {
+      // Local-systemd fallback only when the operator hasn't pinned an
+      // explicit URL — if they did, surface the failure so they can fix
+      // the upstream rather than silently masking it with a local unit.
+      if (explicit) throw err;
+      log.warn({ err, url }, "dream trigger upstream failed, falling back to systemd unit");
       await runShell("sudo", ["systemctl", "start", "kannaka-dream.service"], log);
-      return "kannaka-dream.service started";
+      return "kannaka-dream.service started (upstream unreachable)";
     }
-    const r = await fetcher(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ taskId: p.taskId, source: "queensync" }),
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!r.ok) throw new Error(`dream trigger → HTTP ${r.status}`);
-    return `dream cycle triggered (${r.status})`;
   },
   kannaka_status: async (_p, log, fetcher) => {
     const url =

@@ -378,6 +378,44 @@ function dreamsEvents(dreams: unknown, limit: number): AdapterEventOut[] {
   });
 }
 
+function scheduleEvent(schedule: unknown): AdapterEventOut | null {
+  if (!schedule || typeof schedule !== "object") return null;
+  const obj = schedule as Record<string, unknown>;
+  const current =
+    (obj["current"] as Record<string, unknown> | undefined) ??
+    (obj["now"] as Record<string, unknown> | undefined) ??
+    null;
+  const blocks = asArray(obj["blocks"] ?? obj["schedule"] ?? []);
+  const label =
+    current && (current["name"] ?? current["title"] ?? current["block"]);
+  const summary = label
+    ? `Radio schedule: now → ${String(label)} (${blocks.length} blocks)`
+    : `Radio schedule: ${blocks.length} blocks`;
+  return {
+    id: `radio-schedule-${Date.now()}`,
+    type: "transmission.schedule",
+    summary,
+    raw: obj,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function swarmPeerEvents(peers: unknown, limit: number): AdapterEventOut[] {
+  const arr = asArray(peers);
+  return arr.slice(0, limit).map((item, i) => {
+    const obj = (item ?? {}) as Record<string, unknown>;
+    const id = obj["id"] ?? obj["agentId"] ?? obj["name"] ?? `peer-${i}`;
+    const status = obj["status"] ?? obj["state"] ?? "connected";
+    return {
+      id: `radio-peer-${String(id)}`,
+      type: "swarm.peer",
+      summary: `Swarm peer ${String(id)} — ${String(status)}`,
+      raw: obj,
+      createdAt: new Date().toISOString(),
+    };
+  });
+}
+
 function swarmEvents(swarm: unknown): AdapterEventOut[] {
   if (!swarm || typeof swarm !== "object") return [];
   const obj = swarm as Record<string, unknown>;
@@ -420,14 +458,17 @@ export async function radioPullEvents(
     };
   }
 
-  const [nowPlaying, state, floor, history, dreams, swarm] = await Promise.all([
-    fetchRadioEndpoint<unknown>("/api/now-playing"),
-    fetchRadioEndpoint<unknown>("/api/state"),
-    fetchRadioEndpoint<unknown>(`/api/floor?limit=${limit}`),
-    fetchRadioEndpoint<unknown>(`/api/history?limit=${limit}`),
-    fetchRadioEndpoint<unknown>(`/api/dreams?limit=${limit}`),
-    fetchRadioEndpoint<unknown>("/api/swarm"),
-  ]);
+  const [nowPlaying, state, schedule, floor, history, dreams, swarm, peers] =
+    await Promise.all([
+      fetchRadioEndpoint<unknown>("/api/now-playing"),
+      fetchRadioEndpoint<unknown>("/api/state"),
+      fetchRadioEndpoint<unknown>("/api/schedule"),
+      fetchRadioEndpoint<unknown>(`/api/floor?limit=${limit}`),
+      fetchRadioEndpoint<unknown>(`/api/history?limit=${limit}`),
+      fetchRadioEndpoint<unknown>(`/api/dreams?limit=${limit}`),
+      fetchRadioEndpoint<unknown>("/api/swarm"),
+      fetchRadioEndpoint<unknown>("/api/swarm/peers"),
+    ]);
 
   const events: AdapterEventOut[] = [];
   if (nowPlaying.ok) {
@@ -438,14 +479,26 @@ export async function radioPullEvents(
     const e = stateEvent(state.data);
     if (e) events.push(e);
   }
+  if (schedule.ok) {
+    const e = scheduleEvent(schedule.data);
+    if (e) events.push(e);
+  }
   if (floor.ok) events.push(...floorReactionEvents(floor.data, limit));
   if (history.ok) events.push(...historyEvents(history.data, limit));
   if (dreams.ok) events.push(...dreamsEvents(dreams.data, limit));
   if (swarm.ok) events.push(...swarmEvents(swarm.data));
+  if (peers.ok) events.push(...swarmPeerEvents(peers.data, limit));
 
-  const anyOk = [nowPlaying, state, floor, history, dreams, swarm].some(
-    (r) => r.ok,
-  );
+  const anyOk = [
+    nowPlaying,
+    state,
+    schedule,
+    floor,
+    history,
+    dreams,
+    swarm,
+    peers,
+  ].some((r) => r.ok);
 
   if (anyOk) {
     // Successful fetch (even if every endpoint returned an empty array) is
