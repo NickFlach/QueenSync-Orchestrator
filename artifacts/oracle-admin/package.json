@@ -1,0 +1,25 @@
+{
+  "name": "@workspace/oracle-admin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Privileged shim for the bare-metal Oracle host. Receives HMAC-signed dispatches from QueenSync and runs systemctl + curl actions on behalf of the swarm.",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node --enable-source-maps dist/index.mjs",
+    "build": "node ./build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test src/__tests__/*.test.ts"
+  },
+  "dependencies": {
+    "express": "^5",
+    "pino": "^9"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "catalog:",
+    "esbuild": "^0.27.3",
+    "tsx": "catalog:",
+    "typescript": "^5"
+  }
+}

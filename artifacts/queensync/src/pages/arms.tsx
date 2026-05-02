@@ -6,8 +6,12 @@ import {
   useArmHeartbeat,
   useOnboardArm,
   useGetArm,
+  useCreateTask,
   getListArmsQueryKey,
   getGetArmQueryKey,
+  getListTasksQueryKey,
+  getGetTaskQueryKey,
+  useGetTask,
   Arm,
   OnboardArmBodyType,
   OnboardArmBodyAuthMethod,
@@ -49,6 +53,54 @@ const ARM_TYPES: OnboardArmBodyType[] = [
   "openclaw",
   "external_webhook",
   "mcp",
+  "oracle_admin",
+];
+
+/**
+ * Wave 3 — capability quick-actions. Each entry is a button rendered in the
+ * arm-detail dialog when the arm advertises that capability. The capability
+ * is sent verbatim to `POST /api/tasks`, which routes via the picker
+ * (`oracle-admin` is currently the only arm with these capabilities, so the
+ * dispatch goes there over HMAC-signed external webhook).
+ */
+interface QuickAction {
+  capability: string;
+  label: string;
+  intent: string;
+  context?: Record<string, unknown>;
+  testId: string;
+}
+const QUICK_ACTIONS: QuickAction[] = [
+  {
+    capability: "restart_radio",
+    label: "Restart Radio",
+    intent: "Operator-triggered radio.service restart",
+    testId: "button-restart-radio",
+  },
+  {
+    capability: "restart_observatory",
+    label: "Restart Observatory",
+    intent: "Operator-triggered observatory.service restart",
+    testId: "button-restart-observatory",
+  },
+  {
+    capability: "trigger_oration_now",
+    label: "Trigger Oration",
+    intent: "Operator-triggered oration",
+    testId: "button-trigger-oration",
+  },
+  {
+    capability: "dream_trigger",
+    label: "Trigger Dream Cycle",
+    intent: "Operator-triggered dream cycle",
+    testId: "button-trigger-dream",
+  },
+  {
+    capability: "kannaka_status",
+    label: "Kannaka Status",
+    intent: "Fetch kannaka status snapshot",
+    testId: "button-kannaka-status",
+  },
 ];
 
 const AUTH_METHODS: OnboardArmBodyAuthMethod[] = [
@@ -377,6 +429,49 @@ function ArmDetailDialog({
       queryKey: getGetArmQueryKey(id ?? ""),
     },
   });
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  // Track the most recent quick-action task per arm so we can poll for the
+  // shim's callback ack and surface "completed"/"failed" inline.
+  const [actionTaskId, setActionTaskId] = useState<string | null>(null);
+  const [actionLabel, setActionLabel] = useState<string>("");
+
+  const createTask = useCreateTask({
+    mutation: {
+      onSuccess: (task) => {
+        setActionTaskId(task.id);
+        toast({
+          title: `${actionLabel} dispatched`,
+          description: `task ${task.id.slice(0, 8)}…`,
+        });
+        queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
+      },
+      onError: (err) => {
+        toast({
+          title: "Dispatch failed",
+          description: (err as Error).message,
+          variant: "destructive",
+        });
+      },
+    },
+  });
+
+  // Poll the dispatched task every 2s until it reaches a terminal state.
+  const { data: actionTask } = useGetTask(actionTaskId ?? "", {
+    query: {
+      enabled: !!actionTaskId,
+      queryKey: getGetTaskQueryKey(actionTaskId ?? ""),
+      refetchInterval: (q) => {
+        const s = q.state.data?.status;
+        return s === "completed" || s === "failed" ? false : 2000;
+      },
+    },
+  });
+
+  const availableActions = data
+    ? QUICK_ACTIONS.filter((a) => data.capabilities.includes(a.capability))
+    : [];
+
   return (
     <Dialog open={!!id} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="bg-card border-border/50 max-w-2xl">
@@ -392,6 +487,63 @@ function ArmDetailDialog({
           <Skeleton className="h-32 w-full" />
         ) : (
           <div className="space-y-3 text-sm">
+            {availableActions.length > 0 && (
+              <div
+                className="space-y-2 rounded border border-primary/30 bg-primary/5 p-3"
+                data-testid="arm-quick-actions"
+              >
+                <Label className="text-xs uppercase text-primary">
+                  Quick Actions
+                </Label>
+                <div className="flex flex-wrap gap-2">
+                  {availableActions.map((a) => (
+                    <Button
+                      key={a.capability}
+                      size="sm"
+                      variant="outline"
+                      className="border-primary/50 text-primary hover:bg-primary/20"
+                      data-testid={a.testId}
+                      disabled={createTask.isPending}
+                      onClick={() => {
+                        setActionLabel(a.label);
+                        setActionTaskId(null);
+                        createTask.mutate({
+                          data: {
+                            intent: a.intent,
+                            requiredCapability: a.capability,
+                            priority: 5,
+                            context: { armId: data.id, ...(a.context ?? {}) },
+                          },
+                        });
+                      }}
+                    >
+                      {a.label}
+                    </Button>
+                  ))}
+                </div>
+                {actionTaskId && (
+                  <div
+                    className="text-xs font-mono text-muted-foreground"
+                    data-testid="arm-action-status"
+                  >
+                    {actionLabel} · task {actionTaskId.slice(0, 8)}…{" "}
+                    <span className="text-primary">
+                      [{actionTask?.status ?? "active"}]
+                    </span>
+                    {actionTask?.result ? (
+                      <div className="mt-1 break-words text-foreground/70">
+                        → {actionTask.result}
+                      </div>
+                    ) : null}
+                    {actionTask?.error ? (
+                      <div className="mt-1 break-words text-destructive">
+                        ✗ {actionTask.error}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            )}
             <div>
               <Label className="text-xs uppercase text-muted-foreground">
                 Description

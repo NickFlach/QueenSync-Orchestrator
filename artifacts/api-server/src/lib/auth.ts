@@ -346,3 +346,75 @@ export function applyArmAuthHeaders(
       break;
   }
 }
+
+// ---------------------------------------------------------------------------
+// HMAC body signing (oracle-admin shim)
+// ---------------------------------------------------------------------------
+
+export const ORACLE_ADMIN_TIMESTAMP_HEADER = "x-queensync-timestamp";
+export const ORACLE_ADMIN_SIGNATURE_HEADER = "x-queensync-body-signature";
+
+function getOracleAdminSecret(): string | null {
+  return process.env["QUEENSYNC_ORACLE_ADMIN_HMAC_SECRET"] ?? null;
+}
+
+/**
+ * Returns true if HMAC signing is configured for the oracle-admin shim.
+ * When false, dispatches to oracle_admin arms still go through unsigned
+ * (which the shim will reject in production — operators should configure
+ * the secret).
+ */
+export function isOracleAdminSigningConfigured(): boolean {
+  return getOracleAdminSecret() !== null;
+}
+
+/**
+ * Sign a request body for the oracle-admin shim. Produces both the
+ * timestamp (unix ms, as a decimal string) and the signature
+ * (`sha256=<hex of HMAC(timestamp + ":" + body)>`).
+ *
+ * Returns null when the shared secret env var is unset — callers should
+ * skip the headers in that case (and a warning is logged at boot).
+ */
+export function signOracleAdminBody(
+  body: string,
+  now: number = Date.now(),
+): { timestamp: string; signature: string } | null {
+  const secret = getOracleAdminSecret();
+  if (!secret) return null;
+  const timestamp = String(now);
+  const h = createHmac("sha256", secret);
+  h.update(`${timestamp}:${body}`);
+  return { timestamp, signature: `sha256=${h.digest("hex")}` };
+}
+
+/**
+ * Verify an inbound oracle-admin request signature. Used by the shim
+ * (and by the api-server tests). Rejects timestamps outside ±5 min.
+ */
+export function verifyOracleAdminBody(opts: {
+  body: string;
+  timestamp: string | undefined;
+  signature: string | undefined;
+  secret: string;
+  now?: number;
+  toleranceMs?: number;
+}): { ok: boolean; reason?: string } {
+  const { body, timestamp, signature, secret } = opts;
+  const now = opts.now ?? Date.now();
+  const tolerance = opts.toleranceMs ?? 5 * 60_000;
+  if (!timestamp) return { ok: false, reason: "missing timestamp" };
+  if (!signature) return { ok: false, reason: "missing signature" };
+  const ts = Number(timestamp);
+  if (!Number.isFinite(ts)) return { ok: false, reason: "invalid timestamp" };
+  if (Math.abs(now - ts) > tolerance) {
+    return { ok: false, reason: "timestamp outside tolerance window" };
+  }
+  const h = createHmac("sha256", secret);
+  h.update(`${timestamp}:${body}`);
+  const expected = `sha256=${h.digest("hex")}`;
+  if (!safeEqual(signature, expected)) {
+    return { ok: false, reason: "invalid signature" };
+  }
+  return { ok: true };
+}

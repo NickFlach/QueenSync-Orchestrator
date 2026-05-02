@@ -77,6 +77,7 @@ export const ListArmsResponseItem = zod.object({
       "openclaw",
       "external_webhook",
       "mcp",
+      "oracle_admin",
     ])
     .describe("Agent type"),
   status: zod.enum(["idle", "busy", "failed", "offline", "pending"]),
@@ -105,6 +106,7 @@ export const OnboardArmBody = zod.object({
     "openclaw",
     "external_webhook",
     "mcp",
+    "oracle_admin",
   ]),
   capabilities: zod.array(zod.string()),
   endpointUrl: zod.string().nullish(),
@@ -141,6 +143,7 @@ export const GetArmResponse = zod
         "openclaw",
         "external_webhook",
         "mcp",
+        "oracle_admin",
       ])
       .describe("Agent type"),
     status: zod.enum(["idle", "busy", "failed", "offline", "pending"]),
@@ -200,6 +203,7 @@ export const ArmHeartbeatResponse = zod.object({
       "openclaw",
       "external_webhook",
       "mcp",
+      "oracle_admin",
     ])
     .describe("Agent type"),
   status: zod.enum(["idle", "busy", "failed", "offline", "pending"]),

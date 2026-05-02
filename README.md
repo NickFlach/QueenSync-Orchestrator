@@ -73,6 +73,13 @@ artifacts/
   api-server/       Express 5 + WebSocket backend, Drizzle ORM
   queensync/        React + Vite frontend (Queen Console)
   mockup-sandbox/   Vite preview server for design iteration (not deployed)
+  oracle-admin/     Privileged dispatch shim (Wave 3) — Node + Express, runs
+                    on the Oracle host as user `opc` via systemd + sudoers.
+                    Not a Replit artifact; deployed off-Replit. Accepts
+                    HMAC-signed POST /dispatch requests from QueenSync and
+                    runs `restart_radio` / `restart_observatory` /
+                    `trigger_oration_now` / `setOverride` / `dream_trigger`
+                    / `kannaka_status` capabilities.
 lib/
   api-spec/         OpenAPI 3.1 source-of-truth + Orval codegen runner
   api-client-react/ Generated TanStack Query hooks

@@ -576,6 +576,7 @@ components:
             - openclaw
             - external_webhook
             - mcp
+            - oracle_admin
         status:
           type: string
           enum: [idle, busy, failed, offline, pending]
@@ -626,6 +627,7 @@ components:
             - openclaw
             - external_webhook
             - mcp
+            - oracle_admin
         capabilities:
           type: array
           items: { type: string }

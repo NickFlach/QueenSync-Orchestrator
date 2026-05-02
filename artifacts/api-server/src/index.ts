@@ -6,6 +6,7 @@ import { seedDefaults } from "./lib/seed";
 import { expireOldResonance } from "./lib/resonance";
 import { startFloorPoller } from "./lib/floor-poller";
 import { startNatsBridge } from "./lib/nats-bridge";
+import { startHeartbeatScheduler } from "./lib/heartbeat-scheduler";
 
 const rawPort = process.env["PORT"];
 
@@ -33,6 +34,7 @@ server.listen(port, () => {
   void startNatsBridge().catch((err) =>
     logger.error({ err }, "nats bridge start failed"),
   );
+  startHeartbeatScheduler();
   setInterval(() => {
     void expireOldResonance().catch((err) =>
       logger.error({ err }, "expire failed"),

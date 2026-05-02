@@ -1,0 +1,25 @@
+# /etc/sudoers.d/queensync-oracle-admin
+#
+# Grants the `opc` user (running the queensync-oracle-admin shim) the
+# narrow privilege of restarting the three swarm services and triggering
+# the kannaka-dream unit, with NO PASSWORD prompt. Nothing else.
+#
+# Install with:
+#   sudo install -o root -g root -m 0440 \
+#     systemd/sudoers.d-queensync-oracle-admin \
+#     /etc/sudoers.d/queensync-oracle-admin
+#   sudo visudo -c   # syntax check
+#
+# DO NOT broaden these rules without revisiting the threat model. The shim
+# is internet-facing; any extra command here becomes a remote-execution
+# primitive for any caller that can forge a valid HMAC.
+
+Cmnd_Alias QUEENSYNC_RESTART = \
+    /usr/bin/systemctl restart radio.service, \
+    /usr/bin/systemctl restart observatory.service, \
+    /usr/bin/systemctl start kannaka-dream.service, \
+    /usr/bin/systemctl status radio.service, \
+    /usr/bin/systemctl status observatory.service
+
+opc ALL=(root) NOPASSWD: QUEENSYNC_RESTART
+Defaults!QUEENSYNC_RESTART !requiretty

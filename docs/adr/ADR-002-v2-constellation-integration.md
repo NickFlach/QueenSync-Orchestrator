@@ -1,6 +1,6 @@
 # ADR-002 — QueenSync v2.0: Real Constellation Integration
 
-**Status:** Proposed (target for the next development arc)
+**Status:** Wave 3 in progress (Waves 1–2 shipped; Wave 3 swarm + oracle-admin landing)
 **Date:** 2026-05-02
 **Authors:** Nick Flach + Kannaka constellation
 **Builders:** Replit Agent (primary), Kannaka constellation (review + integration testing)
@@ -204,6 +204,85 @@ Console becomes the live directory.
 A "Restart Radio" button on the radio arm dispatches a task to the
 `oracle_admin` arm; the radio actually restarts; the task shows
 `completed`.
+
+#### Wave 3 — implementation notes (delivered)
+
+- **Seed lineup.** `artifacts/api-server/src/lib/seed.ts` now ships with two
+  arrays: `REAL_ARMS` (the five live registrations above, all defaulting to
+  `status="offline"` until first heartbeat / NATS join) and `MOCK_ARMS`
+  (the legacy Wave-1 demo set). The mocks are only inserted when
+  `QUEENSYNC_SEED_MOCK_ARMS=true|1`. On boot, any legacy mock rows from
+  earlier deploys are deleted; flipping the flag back off cleans them up
+  on the next boot.
+- **`oracle_admin` arm type.** Added to the `Arm.type` and
+  `OnboardArmBody.type` enums in `lib/api-spec/openapi.yaml`; codegen
+  regenerated. The router (`lib/router.ts:dispatchExternal`) now treats
+  `oracle_admin` like `external_webhook` for outbound POST, but additionally
+  attaches `X-QueenSync-Timestamp: <unix_ms>` and
+  `X-QueenSync-Body-Signature: sha256=HMAC-SHA256(timestamp:body)` keyed
+  by `QUEENSYNC_ORACLE_ADMIN_HMAC_SECRET`. Sign/verify helpers live in
+  `lib/auth.ts` (`signOracleAdminBody`, `verifyOracleAdminBody`,
+  `isOracleAdminSigningConfigured`) with a ±5 minute replay window.
+  Unsigned dispatches are still attempted (with a warn log) when the
+  secret is unset, so local dev still works.
+- **The shim.** `artifacts/oracle-admin/` is a small Express 5 + pino
+  service (`POST /dispatch`, `GET /healthz`). It verifies the HMAC body
+  signature, immediately replies `202 accepted`, and runs the matching
+  capability handler asynchronously. The six handlers map to:
+  `restart_radio` / `restart_observatory` → `sudo systemctl restart …`;
+  `trigger_oration_now` → `POST $RADIO_BASE_URL/admin/oration/now`;
+  `setOverride` → `POST $OBSERVATORY_BASE_URL/admin/override` with
+  `{target,value}` from `context`; `dream_trigger` →
+  `POST $KANNAKA_DREAM_TRIGGER_URL` (or local `kannaka-dream.service`);
+  `kannaka_status` → `GET $KANNAKA_STATUS_URL` (default `127.0.0.1:7777`).
+  After the handler resolves, the shim posts the callback to QueenSync
+  with `X-QueenSync-Signature` echoed from the dispatch's
+  `X-QueenSync-Completed-Signature` / `X-QueenSync-Failed-Signature`
+  headers — so the shim never holds `QUEENSYNC_CALLBACK_SECRET`.
+- **Deployment artifacts.** `artifacts/oracle-admin/systemd/`
+  ships `queensync-oracle-admin.service` (runs as `opc`,
+  `EnvironmentFile=/etc/queensync-oracle-admin.env`,
+  `ExecStart=/usr/bin/node /opt/queensync-oracle-admin/dist/index.mjs`)
+  and `sudoers.d-queensync-oracle-admin` with a narrow `Cmnd_Alias` of
+  the four exact `systemctl` invocations the shim is allowed to run
+  (`NOPASSWD`). `artifacts/oracle-admin/README.md` is the operator
+  runbook (build → rsync → install env file → install sudoers fragment →
+  enable systemd unit → verify `/healthz`).
+- **Heartbeat scheduler.** `lib/heartbeat-scheduler.ts` runs every 60s
+  (configurable, default `DEFAULT_HEARTBEAT_INTERVAL_MS = 60_000`),
+  selects arms whose `lastHeartbeat` is older than
+  `QUEENSYNC_ARM_STALE_MS` (default 180000ms) and whose status is not
+  `offline`/`failed`, demotes them to `offline`, broadcasts
+  `arms_updated`, and writes an `arm_marked_offline` log entry per arm.
+  Started from `artifacts/api-server/src/index.ts`. Arms that have
+  never heartbeated (lastHeartbeat IS NULL) are intentionally left alone
+  so seeded `offline` rows don't churn.
+- **Queen Console — quick actions.** `artifacts/queensync/src/pages/arms.tsx`
+  ArmDetailDialog now renders a "Quick Actions" panel with one button
+  per matching capability (Restart Radio, Restart Observatory, Trigger
+  Oration, Trigger Dream Cycle, Kannaka Status). Each button calls
+  `useCreateTask` with the corresponding capability — the picker routes
+  the task to the only arm advertising it (`oracle-admin`). The dialog
+  then polls `useGetTask` every 2s and surfaces the live `[active]` →
+  `[completed]`/`[failed]` status plus the result/error payload returned
+  by the shim's callback.
+- **Tests.** `artifacts/oracle-admin/src/__tests__/` covers HMAC
+  good/bad/expired/missing/tampered signatures and dispatch routing for
+  oration / unknown-capability / setOverride-validation /
+  kannaka_status. `artifacts/api-server/src/lib/__tests__/auth-oracle.test.ts`
+  exercises sign/verify round-trips, header constants, and the
+  unset-secret no-op path. `…/heartbeat-scheduler.test.ts` covers
+  stale-vs-fresh demotion, the offline/failed bypass, the never-pinged
+  bypass, and the `staleMs` override. `…/seed.test.ts` covers
+  real-only / mocks-on / mocks-off-cleanup / oracle-admin shape /
+  default-status assertions.
+
+**Out of scope for Wave 3** (deferred to follow-ups):
+per-arm rotating credentials (#17), oracle-admin runtime hardening
+(#18), an audit log for privileged dispatches (#19), and Wave 4/5
+behavior. The shim ships with a single shared HMAC secret —
+operators **must** set `QUEENSYNC_ORACLE_ADMIN_HMAC_SECRET` (and the
+matching env on the Oracle host) before exposing the shim publicly.
 
 ### Wave 4 — Memory Gate ↔ HRM bridge
 

@@ -18,4 +18,5 @@ export const OnboardArmBodyType = {
   openclaw: "openclaw",
   external_webhook: "external_webhook",
   mcp: "mcp",
+  oracle_admin: "oracle_admin",
 } as const;

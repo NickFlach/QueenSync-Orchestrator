@@ -4,7 +4,14 @@ import { recordLog } from "./log";
 import { broadcast } from "./ws";
 import { evaluateMemory } from "./memory-gate";
 import { logger } from "./logger";
-import { applyArmAuthHeaders, signCallback } from "./auth";
+import {
+  applyArmAuthHeaders,
+  isOracleAdminSigningConfigured,
+  ORACLE_ADMIN_SIGNATURE_HEADER,
+  ORACLE_ADMIN_TIMESTAMP_HEADER,
+  signCallback,
+  signOracleAdminBody,
+} from "./auth";
 import { validateOutboundUrl, logBlockedUrl } from "./url-guard";
 
 export async function pickArmForCapability(
@@ -70,14 +77,14 @@ export async function dispatchTask(task: Task): Promise<Task> {
     .where(eq(armsTable.id, armId));
   if (!arm) return updated;
 
-  if (arm.type === "external_webhook") {
+  if (arm.type === "external_webhook" || arm.type === "oracle_admin") {
     if (arm.endpointUrl) {
       void dispatchExternal(updated, arm);
     } else {
       void failTask(
         updated,
         arm,
-        "External webhook arm has no endpointUrl configured.",
+        `${arm.type} arm has no endpointUrl configured.`,
       );
     }
   } else if (arm.type === "local_simulated" || arm.type === "kannaktopus_arm") {
@@ -156,11 +163,29 @@ async function dispatchExternal(task: Task, arm: Arm) {
     headers["X-QueenSync-Completed-Signature"] = completedSig;
     headers["X-QueenSync-Failed-Signature"] = failedSig;
   }
+  const body = JSON.stringify(payload);
+  // For the oracle-admin shim, sign the request body with HMAC-SHA256
+  // (timestamp + ":" + body) so the privileged shim can refuse forged
+  // dispatches. Falls back to unsigned + a warning when the secret is unset.
+  if (arm.type === "oracle_admin") {
+    if (isOracleAdminSigningConfigured()) {
+      const sig = signOracleAdminBody(body);
+      if (sig) {
+        headers[ORACLE_ADMIN_TIMESTAMP_HEADER] = sig.timestamp;
+        headers[ORACLE_ADMIN_SIGNATURE_HEADER] = sig.signature;
+      }
+    } else {
+      logger.warn(
+        { armId: arm.id, taskId: task.id },
+        "dispatching to oracle_admin arm without HMAC signature — set QUEENSYNC_ORACLE_ADMIN_HMAC_SECRET",
+      );
+    }
+  }
   try {
     const r = await fetch(arm.endpointUrl, {
       method: "POST",
       headers,
-      body: JSON.stringify(payload),
+      body,
       signal: AbortSignal.timeout(5000),
     });
     await recordLog({
@@ -172,17 +197,33 @@ async function dispatchExternal(task: Task, arm: Arm) {
       metadata: { taskId: task.id, armId: arm.id, status: r.status },
     });
     if (!r.ok) {
-      void mockCallback(task, arm, true);
+      // Privileged arms must NEVER be marked completed via the mock fallback
+      // — that would let a 4xx/5xx from a privileged shim look like a
+      // successful restart. Fail loudly instead.
+      if (arm.type === "oracle_admin") {
+        await failTask(
+          task,
+          arm,
+          `Dispatch to ${arm.name} returned HTTP ${r.status}`,
+        );
+      } else {
+        void mockCallback(task, arm, true);
+      }
     }
   } catch (err) {
-    logger.warn({ err, armId: arm.id }, "external dispatch failed; using mock callback");
+    const msg = (err as Error).message;
+    logger.warn({ err, armId: arm.id }, "external dispatch failed");
     await recordLog({
       eventType: "task_dispatch_failed",
       source: arm.id,
-      summary: `Dispatch to ${arm.name} failed: ${(err as Error).message}`,
+      summary: `Dispatch to ${arm.name} failed: ${msg}`,
       metadata: { taskId: task.id, armId: arm.id },
     });
-    void mockCallback(task, arm, true);
+    if (arm.type === "oracle_admin") {
+      await failTask(task, arm, `Dispatch to ${arm.name} failed: ${msg}`);
+    } else {
+      void mockCallback(task, arm, true);
+    }
   }
 }
 

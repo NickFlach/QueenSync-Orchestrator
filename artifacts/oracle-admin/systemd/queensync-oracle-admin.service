@@ -1,0 +1,28 @@
+[Unit]
+Description=QueenSync Oracle-Admin Shim — privileged dispatch executor for the Kannaka constellation
+Documentation=https://github.com/ninja-portal/queensync (artifacts/oracle-admin/README.md)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=opc
+Group=opc
+WorkingDirectory=/opt/queensync-oracle-admin
+EnvironmentFile=/etc/queensync-oracle-admin.env
+ExecStart=/usr/bin/node --enable-source-maps /opt/queensync-oracle-admin/dist/index.mjs
+Restart=on-failure
+RestartSec=5
+# Hardening — the shim only needs to bind a TCP port, run sudo systemctl,
+# and curl outbound. Nothing else.
+NoNewPrivileges=false
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/queensync-oracle-admin
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=queensync-oracle-admin
+
+[Install]
+WantedBy=multi-user.target
