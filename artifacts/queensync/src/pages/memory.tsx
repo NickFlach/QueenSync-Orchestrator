@@ -54,7 +54,7 @@ import {
   type FilterField,
 } from "@/components/filter-bar";
 
-function absorbBadge(state: MemoryEventAbsorbState) {
+function absorbBadge(state: MemoryEventAbsorbState, attempts?: number) {
   switch (state) {
     case "absorbed":
       return (
@@ -66,12 +66,18 @@ function absorbBadge(state: MemoryEventAbsorbState) {
       return (
         <Badge className="text-[10px] uppercase bg-amber-500/15 text-amber-300 border-amber-500/30 border">
           <Clock className="w-3 h-3 mr-1" /> hrm pending
+          {attempts && attempts > 1 ? (
+            <span className="ml-1 opacity-80">×{attempts}</span>
+          ) : null}
         </Badge>
       );
     case "failed":
       return (
         <Badge className="text-[10px] uppercase bg-destructive/15 text-destructive border-destructive/30 border">
           <AlertCircle className="w-3 h-3 mr-1" /> absorb failed
+          {attempts && attempts > 0 ? (
+            <span className="ml-1 opacity-80">×{attempts}</span>
+          ) : null}
         </Badge>
       );
     case "not_required":
@@ -225,7 +231,7 @@ function MemoryRow({
                 </Badge>
               )}
               {decisionBadge(decision)}
-              {absorbBadge(event.absorbState)}
+              {absorbBadge(event.absorbState, event.absorbAttempts)}
             </div>
           </div>
           {event.summary && (
@@ -393,7 +399,7 @@ function ExemplarRow({
             </div>
             <div className="flex items-center gap-2">
               {exemplarOutcomeBadge(event.exemplarOutcome)}
-              {absorbBadge(event.absorbState)}
+              {absorbBadge(event.absorbState, event.absorbAttempts)}
             </div>
           </div>
           <p className="text-sm text-foreground/80 line-clamp-3">

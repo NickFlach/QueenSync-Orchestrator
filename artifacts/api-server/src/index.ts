@@ -7,6 +7,7 @@ import { expireOldResonance } from "./lib/resonance";
 import { startFloorPoller } from "./lib/floor-poller";
 import { startNatsBridge } from "./lib/nats-bridge";
 import { startHeartbeatScheduler } from "./lib/heartbeat-scheduler";
+import { startAbsorbRetryScheduler } from "./lib/absorb-retry";
 
 const rawPort = process.env["PORT"];
 
@@ -35,6 +36,7 @@ server.listen(port, () => {
     logger.error({ err }, "nats bridge start failed"),
   );
   startHeartbeatScheduler();
+  startAbsorbRetryScheduler();
   setInterval(() => {
     void expireOldResonance().catch((err) =>
       logger.error({ err }, "expire failed"),
