@@ -35,6 +35,17 @@ to QueenSync's `/api/tasks/:id/callback`. The expected
 (`X-QueenSync-Completed-Signature` / `X-QueenSync-Failed-Signature`) so
 the shim never needs to know `QUEENSYNC_CALLBACK_SECRET`.
 
+> **Production note:** `QUEENSYNC_CALLBACK_SECRET` is effectively
+> required on the QueenSync side for the end-to-end Restart Radio path
+> to succeed. Without it, QueenSync only emits the per-task signature
+> headers when the operator falls back to bearer-token callback auth —
+> which the shim does not hold. With `QUEENSYNC_CALLBACK_SECRET` set,
+> QueenSync writes `X-QueenSync-Completed-Signature` /
+> `X-QueenSync-Failed-Signature` on the dispatch and the shim echoes
+> them back unchanged on the callback. Set it in the QueenSync
+> environment (NOT in the shim's env file) before promoting the
+> Restart Radio Quick Action to operators.
+
 ## Authentication — HMAC body signing
 
 Inbound dispatches must carry:

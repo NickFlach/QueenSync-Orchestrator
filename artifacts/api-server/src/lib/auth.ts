@@ -20,7 +20,14 @@ const VIEWER_PASSWORD = process.env["QUEENSYNC_VIEWER_PASSWORD"] ?? null;
 const REQUIRE_AUTH_FOR_READS =
   process.env["QUEENSYNC_REQUIRE_AUTH_FOR_READS"] === "1" ||
   process.env["QUEENSYNC_REQUIRE_AUTH_FOR_READS"] === "true";
-const CALLBACK_SECRET = process.env["QUEENSYNC_CALLBACK_SECRET"];
+// Read at call time so operators can rotate without a process restart
+// AND so tests can set the env var inside before() hooks. Empty string
+// is normalized to null (matches the oracle-admin secret pattern).
+function getCallbackSecret(): string | null {
+  const v = process.env["QUEENSYNC_CALLBACK_SECRET"];
+  if (v === undefined || v === "") return null;
+  return v;
+}
 
 const AUTH_CONFIGURED = Boolean(
   OPERATOR_TOKEN || VIEWER_TOKEN || OPERATOR_PASSWORD || VIEWER_PASSWORD,
@@ -282,8 +289,9 @@ export const requireAdminToken: RequestHandler = (req, res, next) => {
 // ---------------------------------------------------------------------------
 
 export function signCallback(taskId: string, status: string): string | null {
-  if (!CALLBACK_SECRET) return null;
-  const h = createHmac("sha256", CALLBACK_SECRET);
+  const secret = getCallbackSecret();
+  if (!secret) return null;
+  const h = createHmac("sha256", secret);
   h.update(`${taskId}:${status}`);
   return `sha256=${h.digest("hex")}`;
 }
@@ -300,7 +308,7 @@ export function verifyCallbackAuth(
   taskId: string,
   status: string,
 ): { ok: boolean; reason?: string } {
-  if (CALLBACK_SECRET) {
+  if (getCallbackSecret()) {
     const provided = req.header(SIGNATURE_HEADER);
     if (!provided) return { ok: false, reason: "missing signature" };
     const expected = signCallback(taskId, status);

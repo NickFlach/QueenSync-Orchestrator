@@ -318,35 +318,67 @@ export async function seedDefaults() {
     );
   }
 
-  // Reconcile capability/endpoint drift on existing real-arm rows so the
-  // ADR's required capability set is the source of truth even when an arm
-  // row was inserted by an earlier seed revision. Also bootstrap a
-  // lastHeartbeat timestamp on rows that have a heartbeatUrl but never
-  // got pinged — without it, the staleness sweep can never demote them
-  // (it intentionally skips NULL lastHeartbeat).
+  // Reconcile drift on existing real-arm rows so the ADR is the source of
+  // truth even when an arm row was inserted by an earlier seed revision.
+  // Critically this includes `type` — a stale `oracle-admin` row stuck on
+  // `external_webhook` would NOT receive HMAC-signed dispatch, defeating
+  // the privileged-arm guarantee. Also overwrites authMethod, resonance
+  // metadata, and bootstraps lastHeartbeat for heartbeatUrl arms.
   for (const target of REAL_ARMS) {
     const row = existing.find((r) => r.id === target.id);
     if (!row) continue;
+    const targetEndpoint = (target as { endpointUrl?: string }).endpointUrl ?? null;
+    const targetHb = (target as { heartbeatUrl?: string }).heartbeatUrl ?? null;
+    const targetTags = [...target.resonanceTags];
+    const tagsDiffer =
+      row.resonanceTags.length !== targetTags.length ||
+      targetTags.some((t) => !row.resonanceTags.includes(t));
     const capsDiffer =
       row.capabilities.length !== target.capabilities.length ||
       target.capabilities.some((c) => !row.capabilities.includes(c));
-    const urlDiffers =
-      (target as { endpointUrl?: string }).endpointUrl !== undefined &&
-      row.endpointUrl !== (target as { endpointUrl?: string }).endpointUrl;
-    const targetHb = (target as { heartbeatUrl?: string }).heartbeatUrl;
+    const typeDiffers = row.type !== target.type;
+    const authDiffers = row.authMethod !== target.authMethod;
+    const endpointDiffers = row.endpointUrl !== targetEndpoint;
+    const heartbeatDiffers = row.heartbeatUrl !== targetHb;
+    const sensitivityDiffers = row.resonanceSensitivity !== target.resonanceSensitivity;
+    const modeDiffers = row.resonanceMode !== target.resonanceMode;
     const needsBootstrapHb = Boolean(targetHb) && row.lastHeartbeat === null;
-    if (!capsDiffer && !urlDiffers && !needsBootstrapHb) continue;
+    const anyDrift =
+      capsDiffer ||
+      typeDiffers ||
+      authDiffers ||
+      endpointDiffers ||
+      heartbeatDiffers ||
+      tagsDiffer ||
+      sensitivityDiffers ||
+      modeDiffers ||
+      needsBootstrapHb;
+    if (!anyDrift) continue;
     const patch: Record<string, unknown> = {};
     if (capsDiffer) patch["capabilities"] = [...target.capabilities];
-    if (urlDiffers) {
-      patch["endpointUrl"] = (target as { endpointUrl?: string }).endpointUrl;
-      patch["heartbeatUrl"] = targetHb ?? row.heartbeatUrl;
-    }
+    if (typeDiffers) patch["type"] = target.type;
+    if (authDiffers) patch["authMethod"] = target.authMethod;
+    if (endpointDiffers) patch["endpointUrl"] = targetEndpoint;
+    if (heartbeatDiffers) patch["heartbeatUrl"] = targetHb;
+    if (tagsDiffer) patch["resonanceTags"] = targetTags;
+    if (sensitivityDiffers) patch["resonanceSensitivity"] = target.resonanceSensitivity;
+    if (modeDiffers) patch["resonanceMode"] = target.resonanceMode;
     if (needsBootstrapHb) patch["lastHeartbeat"] = new Date();
     await db.update(armsTable).set(patch).where(eq(armsTable.id, target.id));
     logger.info(
-      { id: target.id, capsDiffer, urlDiffers, bootstrappedHeartbeat: needsBootstrapHb },
-      "reconciled real-arm row to current ADR-002 capability/endpoint set",
+      {
+        id: target.id,
+        capsDiffer,
+        typeDiffers,
+        authDiffers,
+        endpointDiffers,
+        heartbeatDiffers,
+        tagsDiffer,
+        sensitivityDiffers,
+        modeDiffers,
+        bootstrappedHeartbeat: needsBootstrapHb,
+      },
+      "reconciled real-arm row to current ADR-002 source of truth",
     );
   }
 }

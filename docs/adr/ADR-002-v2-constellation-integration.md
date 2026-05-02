@@ -252,6 +252,13 @@ A "Restart Radio" button on the radio arm dispatches a task to the
   with `X-QueenSync-Signature` echoed from the dispatch's
   `X-QueenSync-Completed-Signature` / `X-QueenSync-Failed-Signature`
   headers — so the shim never holds `QUEENSYNC_CALLBACK_SECRET`.
+  **Deployment requirement:** `QUEENSYNC_CALLBACK_SECRET` must be set
+  on the QueenSync side for this echo path to work. Without it,
+  `signCallback()` returns null, the dispatch headers are omitted, the
+  shim has no signature to echo, and the callback handler rejects the
+  reply (or, worse, silently accepts it in dev mode and never marks the
+  task `completed`). Operators must configure this secret before
+  enabling the Restart Radio Quick Action in production.
 - **Deployment artifacts.** `artifacts/oracle-admin/systemd/`
   ships `queensync-oracle-admin.service` (runs as `opc`,
   `EnvironmentFile=/etc/queensync-oracle-admin.env`,
