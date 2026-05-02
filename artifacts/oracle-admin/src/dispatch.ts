@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import type pino from "pino";
+import { incrementDispatch } from "./metrics";
 
 export interface DispatchPayload {
   taskId: string;
@@ -171,6 +172,7 @@ export async function runDispatch(
     result = (err as Error).message;
     log.warn({ err, taskId: payload.taskId }, "handler failed");
   }
+  incrementDispatch(payload.requiredCapability, status);
   await postCallback(payload, status, result, log, opts);
 }
 

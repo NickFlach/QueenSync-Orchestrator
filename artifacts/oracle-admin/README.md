@@ -59,6 +59,65 @@ Without a valid signature the shim returns `401`. Without a configured
 secret it returns `503` (so a misconfigured shim can't accidentally accept
 unsigned traffic in production).
 
+## Defence in depth (Wave 3 hardening)
+
+HMAC body signing is the front-door auth, but a leaked secret would
+otherwise grant unconditional `sudo systemctl …`. Three independent
+layers run in front of HMAC verification:
+
+| Env var                              | Default | Purpose                                                                                                  |
+| ------------------------------------ | ------- | -------------------------------------------------------------------------------------------------------- |
+| `ORACLE_ADMIN_ALLOWED_IPS`           | _empty_ | Comma-separated source-IP allowlist. Empty = allow-all. On a public bind, set this to the QueenSync IP.  |
+| `ORACLE_ADMIN_TRUST_PROXY`           | `false` | When `true`, honour `X-Forwarded-For` so the allowlist / logs see the real client behind nginx/caddy. **Only enable this when the direct shim port is firewalled or bound to loopback** — otherwise an attacker can spoof XFF and bypass the IP allowlist. |
+| `ORACLE_ADMIN_RATE_LIMIT_PER_MIN`    | `5`     | Per-source-IP cap on `/dispatch`. Set to `0` to disable (not recommended on a public bind).              |
+| `ORACLE_ADMIN_ENABLED_CAPABILITIES`  | _empty_ | Comma-separated capability allowlist. Empty = all six are enabled. Use to disable e.g. `dream_trigger`.  |
+
+Behaviour:
+
+- A request from a non-allowlisted IP is dropped with `403` **before** HMAC
+  verification — no CPU is spent verifying a forged signature.
+- A leaked HMAC secret can submit at most `ORACLE_ADMIN_RATE_LIMIT_PER_MIN`
+  dispatches per minute per source IP; the rest get `429` with a
+  `Retry-After` header.
+- A capability not in `ORACLE_ADMIN_ENABLED_CAPABILITIES` (when configured)
+  is rejected with `403` and never reaches the privileged handler.
+- `/healthz` is always reachable (so systemd / load-balancer liveness
+  probes don't need to be added to the allowlist).
+
+Recommended values for the public deploy:
+
+```bash
+ORACLE_ADMIN_HOST=0.0.0.0                 # behind the TLS reverse proxy
+ORACLE_ADMIN_ALLOWED_IPS=<QueenSync IP>   # set after first deploy of QueenSync
+ORACLE_ADMIN_TRUST_PROXY=true             # nginx/caddy fronts the shim
+ORACLE_ADMIN_RATE_LIMIT_PER_MIN=5
+# leave ORACLE_ADMIN_ENABLED_CAPABILITIES unset unless a host should be restricted
+```
+
+## Metrics — `GET /metrics`
+
+The shim exposes Prometheus-format counters at `/metrics`. Each
+dispatch contributes to `oracle_admin_dispatch_total{capability,status}`
+where `status` is one of:
+
+- `accepted` — passed all checks and the handler was scheduled
+- `completed` / `failed` — handler outcome
+- `rejected_signature` — bad/missing/expired HMAC
+- `rejected_ip` — source IP not allowlisted
+- `rejected_rate` — per-IP rate limit exceeded (HTTP 429)
+- `rejected_capability` — capability disabled on this host (HTTP 403)
+- `rejected_payload` — missing body / missing taskId
+- `rejected_unconfigured` — shim missing HMAC secret (HTTP 503)
+
+Plus a `oracle_admin_uptime_seconds` gauge. Send `Accept:
+application/json` to get the same data as JSON instead of the
+Prometheus text exposition.
+
+```bash
+curl -fsS http://127.0.0.1:8090/metrics
+curl -fsS -H 'Accept: application/json' http://127.0.0.1:8090/metrics
+```
+
 ## Deployment
 
 ```bash
