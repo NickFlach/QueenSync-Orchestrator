@@ -20,9 +20,7 @@ const VIEWER_PASSWORD = process.env["QUEENSYNC_VIEWER_PASSWORD"] ?? null;
 const REQUIRE_AUTH_FOR_READS =
   process.env["QUEENSYNC_REQUIRE_AUTH_FOR_READS"] === "1" ||
   process.env["QUEENSYNC_REQUIRE_AUTH_FOR_READS"] === "true";
-// Read at call time so operators can rotate without a process restart
-// AND so tests can set the env var inside before() hooks. Empty string
-// is normalized to null (matches the oracle-admin secret pattern).
+// Read at call time so the secret can be rotated without a restart.
 function getCallbackSecret(): string | null {
   const v = process.env["QUEENSYNC_CALLBACK_SECRET"];
   if (v === undefined || v === "") return null;

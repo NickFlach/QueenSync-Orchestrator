@@ -215,8 +215,8 @@ async function dispatchExternal(task: Task, arm: Arm) {
       summary: `Dispatch to ${arm.name} failed: ${msg}`,
       metadata: { taskId: task.id, armId: arm.id, blocked },
     });
-    // SSRF-blocked URLs and any privileged-arm transport failure must
-    // never be marked completed via the mock fallback.
+    // SSRF-blocked URLs and privileged-arm failures never fall back to
+    // the mock-completion path.
     if (blocked || arm.type === "oracle_admin") {
       await failTask(task, arm, `Dispatch to ${arm.name} failed: ${msg}`);
     } else {

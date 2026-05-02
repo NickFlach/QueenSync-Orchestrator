@@ -318,12 +318,9 @@ export async function seedDefaults() {
     );
   }
 
-  // Reconcile drift on existing real-arm rows so the ADR is the source of
-  // truth even when an arm row was inserted by an earlier seed revision.
-  // Critically this includes `type` — a stale `oracle-admin` row stuck on
-  // `external_webhook` would NOT receive HMAC-signed dispatch, defeating
-  // the privileged-arm guarantee. Also overwrites authMethod, resonance
-  // metadata, and bootstraps lastHeartbeat for heartbeatUrl arms.
+  // Reconcile pre-existing real-arm rows to the ADR-002 source of truth.
+  // Includes `type` — a stale oracle-admin row on `external_webhook`
+  // would skip HMAC-signed dispatch.
   for (const target of REAL_ARMS) {
     const row = existing.find((r) => r.id === target.id);
     if (!row) continue;
