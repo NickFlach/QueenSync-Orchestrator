@@ -9,6 +9,7 @@ import {
   resonanceFieldsTable,
 } from "@workspace/db";
 import { observatoryHealth, radioHealth } from "../lib/adapters";
+import { getNatsStatus } from "../lib/nats-bridge";
 
 const router: IRouter = Router();
 
@@ -50,6 +51,7 @@ router.get("/summary", async (_req, res): Promise<void> => {
     activeResonance: activeRes[0]?.count ?? 0,
     radioStatus: radio.mode === "live" ? "live" : "mock",
     observatoryStatus: obs.mode === "live" ? "live" : "mock",
+    nats: getNatsStatus(),
   });
 });
 

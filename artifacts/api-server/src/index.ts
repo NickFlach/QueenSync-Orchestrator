@@ -5,6 +5,7 @@ import { attachWebSocket } from "./lib/ws";
 import { seedDefaults } from "./lib/seed";
 import { expireOldResonance } from "./lib/resonance";
 import { startFloorPoller } from "./lib/floor-poller";
+import { startNatsBridge } from "./lib/nats-bridge";
 
 const rawPort = process.env["PORT"];
 
@@ -29,6 +30,9 @@ server.listen(port, () => {
     logger.error({ err }, "seed failed"),
   );
   startFloorPoller();
+  void startNatsBridge().catch((err) =>
+    logger.error({ err }, "nats bridge start failed"),
+  );
   setInterval(() => {
     void expireOldResonance().catch((err) =>
       logger.error({ err }, "expire failed"),

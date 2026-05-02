@@ -13,6 +13,8 @@ import { broadcast } from "../lib/ws";
 import { validateOutboundUrl, logBlockedUrl } from "../lib/url-guard";
 import { safeFetch, BlockedUrlError } from "../lib/safe-fetch";
 import { requireOperator } from "../lib/auth";
+import { SUBJECTS } from "@workspace/nats";
+import { getNatsClient, getNatsStatus } from "../lib/nats-bridge";
 
 const router: IRouter = Router();
 
@@ -143,6 +145,16 @@ router.post("/arms/:id/heartbeat", requireOperator, async (req, res): Promise<vo
   res.json(updated);
 });
 
+// Arms whose `resonanceTags` include this marker are probed via NATS
+// REQ/REPLY on `KANNAKA.ask.<id>` first; HTTPS is used as fallback.
+const NATS_REACHABLE_TAG = "nats";
+
+function armIsNatsReachable(arm: { resonanceTags: string[]; type: string }): boolean {
+  if (arm.resonanceTags.includes(NATS_REACHABLE_TAG)) return true;
+  // Real Kannaktopus arms live on the constellation bus by default.
+  return arm.type === "kannaktopus_arm";
+}
+
 router.post("/arms/:id/test-connection", requireOperator, async (req, res): Promise<void> => {
   const id = String(req.params.id);
   const [arm] = await db.select().from(armsTable).where(eq(armsTable.id, id));
@@ -150,12 +162,53 @@ router.post("/arms/:id/test-connection", requireOperator, async (req, res): Prom
     res.status(404).json({ error: "arm not found" });
     return;
   }
+
+  // Try NATS REQ/REPLY first when the arm is flagged NATS-reachable AND
+  // our subscriber is actually connected. Falls through to HTTPS otherwise.
+  const natsClient = getNatsClient();
+  const natsState = getNatsStatus().state;
+  if (armIsNatsReachable(arm) && natsClient && natsState === "connected") {
+    const subject = `${SUBJECTS.ASK_PREFIX}.${arm.id}`;
+    const start = Date.now();
+    try {
+      const reply = await natsClient.request(
+        subject,
+        { ping: true, ts: Date.now() },
+        { timeoutMs: 2000 },
+      );
+      res.json({
+        ok: true,
+        message: `Reached ${arm.name} via NATS (${subject})`,
+        latencyMs: Date.now() - start,
+        method: "nats",
+        replyData: reply.data,
+      });
+      return;
+    } catch (err) {
+      // Fall through to HTTPS — record the NATS failure so the operator
+      // can see why we degraded.
+      const natsErr = (err as Error).message;
+      const targetUrl = arm.heartbeatUrl ?? arm.endpointUrl;
+      if (!targetUrl) {
+        res.json({
+          ok: false,
+          message: `NATS request to ${subject} failed: ${natsErr} — no HTTPS fallback configured`,
+          latencyMs: Date.now() - start,
+          method: "nats",
+        });
+        return;
+      }
+      // continue with HTTPS probe below
+    }
+  }
+
   const targetUrl = arm.heartbeatUrl ?? arm.endpointUrl;
   if (!targetUrl) {
     res.json({
       ok: true,
       message: `${arm.name} is local — no endpoint to probe.`,
       latencyMs: 0,
+      method: "local",
     });
     return;
   }
@@ -166,6 +219,7 @@ router.post("/arms/:id/test-connection", requireOperator, async (req, res): Prom
       ok: false,
       message: `Refused to probe ${targetUrl}: ${guard.reason}`,
       latencyMs: 0,
+      method: "https",
     });
     return;
   }
@@ -181,6 +235,7 @@ router.post("/arms/:id/test-connection", requireOperator, async (req, res): Prom
         ? `Reached ${targetUrl} (${r.status})`
         : `Endpoint responded ${r.status}`,
       latencyMs: Date.now() - start,
+      method: "https",
     });
   } catch (err) {
     if (err instanceof BlockedUrlError) {
@@ -188,6 +243,7 @@ router.post("/arms/:id/test-connection", requireOperator, async (req, res): Prom
         ok: false,
         message: `Refused to probe ${targetUrl}: ${err.reason}`,
         latencyMs: Date.now() - start,
+        method: "https",
       });
       return;
     }
@@ -195,6 +251,7 @@ router.post("/arms/:id/test-connection", requireOperator, async (req, res): Prom
       ok: false,
       message: `Unreachable: ${(err as Error).message}`,
       latencyMs: Date.now() - start,
+      method: "https",
     });
   }
 });

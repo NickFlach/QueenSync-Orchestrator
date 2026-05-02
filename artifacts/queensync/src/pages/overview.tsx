@@ -227,6 +227,7 @@ export default function Overview() {
                 name="Observatory · Auditor"
                 status={summary?.observatoryStatus || "unknown"}
               />
+              <NatsRow nats={summary?.nats} />
               <div className="grid grid-cols-2 gap-3 mt-4 text-xs font-mono">
                 <div className="p-2 bg-background border border-border/50 rounded">
                   <div className="text-muted-foreground uppercase text-[10px]">
@@ -296,6 +297,68 @@ function AdapterRow({ name, status }: { name: string; status: string }) {
       >
         {status}
       </span>
+    </div>
+  );
+}
+
+interface NatsStatusShape {
+  state: string;
+  mode: string;
+  url?: string | null;
+  lastError?: string | null;
+  lastConnectedAt?: string | null;
+  subscribedSubjects?: string[];
+}
+
+function NatsRow({ nats }: { nats?: NatsStatusShape | null }) {
+  const state = nats?.state ?? "unknown";
+  const mode = nats?.mode ?? "mock";
+  const url = nats?.url ?? null;
+  const lastErr = nats?.lastError ?? null;
+  const lastConn = nats?.lastConnectedAt ?? null;
+  const subs = nats?.subscribedSubjects ?? [];
+  const stateColor =
+    state === "connected"
+      ? "text-primary border-primary/40"
+      : state === "connecting" || state === "reconnecting"
+        ? "text-yellow-500 border-yellow-500/40"
+        : state === "disabled"
+          ? "text-muted-foreground border-border"
+          : "text-destructive border-destructive/40";
+  return (
+    <div className="p-3 bg-background rounded-md border border-border/50 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="font-medium text-sm text-foreground">
+          NATS · Constellation Bus
+        </span>
+        <div className="flex items-center gap-2">
+          <span
+            className={`text-[10px] uppercase font-mono px-1.5 py-0.5 border rounded ${stateColor}`}
+            data-testid="badge-nats-state"
+          >
+            {state}
+          </span>
+          <span
+            className={`text-[10px] uppercase font-mono px-1.5 py-0.5 border rounded ${mode === "live" ? "text-primary border-primary/40" : "text-muted-foreground border-border"}`}
+          >
+            {mode}
+          </span>
+        </div>
+      </div>
+      <div className="text-[10px] font-mono text-muted-foreground space-y-0.5">
+        {url && <div className="break-all">url: {url}</div>}
+        {lastConn && (
+          <div>last connected: {new Date(lastConn).toLocaleTimeString()}</div>
+        )}
+        {lastErr && (
+          <div className="text-destructive break-all">last error: {lastErr}</div>
+        )}
+        {subs.length > 0 && (
+          <div className="break-all">
+            subscribed: {subs.length} subject{subs.length === 1 ? "" : "s"}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

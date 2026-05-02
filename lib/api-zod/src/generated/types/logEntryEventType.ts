@@ -26,4 +26,8 @@ export const LogEntryEventType = {
   adapter_pull: "adapter_pull",
   dream_lite: "dream_lite",
   kannaktopus_wake: "kannaktopus_wake",
+  dream_start: "dream_start",
+  dream_end: "dream_end",
+  arm_presence_join: "arm_presence_join",
+  arm_presence_leave: "arm_presence_leave",
 } as const;

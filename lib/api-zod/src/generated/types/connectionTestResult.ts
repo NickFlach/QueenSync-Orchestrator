@@ -5,10 +5,20 @@
  * QueenSync — Kannaka agent orchestration & resonance control plane
  * OpenAPI spec version: 0.2.0
  */
+import type { ConnectionTestResultMethod } from "./connectionTestResultMethod";
 
 export interface ConnectionTestResult {
   ok: boolean;
   message: string;
   /** @nullable */
   latencyMs?: number | null;
+  /**
+   * Transport used for the probe. `nats` when reached over the
+constellation bus via REQ/REPLY on `KANNAKA.ask.<armId>`,
+`https` for HTTP heartbeat URLs, `local` for arms with no
+external endpoint.
+
+   * @nullable
+   */
+  method?: ConnectionTestResultMethod;
 }

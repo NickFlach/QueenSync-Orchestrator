@@ -5,6 +5,7 @@
  * QueenSync — Kannaka agent orchestration & resonance control plane
  * OpenAPI spec version: 0.2.0
  */
+import type { NatsStatus } from "./natsStatus";
 
 export interface SystemSummary {
   activeArms: number;
@@ -17,4 +18,5 @@ export interface SystemSummary {
   activeResonance: number;
   radioStatus: string;
   observatoryStatus: string;
+  nats: NatsStatus;
 }

@@ -5,8 +5,44 @@
  * QueenSync — Kannaka agent orchestration & resonance control plane
  * OpenAPI spec version: 0.2.0
  */
+export type NatsStatusState =
+  (typeof NatsStatusState)[keyof typeof NatsStatusState];
+
+export const NatsStatusState = {
+  disabled: "disabled",
+  disconnected: "disconnected",
+  connecting: "connecting",
+  connected: "connected",
+  reconnecting: "reconnecting",
+  closed: "closed",
+} as const;
+
+export type NatsStatusMode =
+  (typeof NatsStatusMode)[keyof typeof NatsStatusMode];
+
+export const NatsStatusMode = {
+  live: "live",
+  mock: "mock",
+} as const;
+
+/**
+ * Live NATS subscriber state (per ADR-002 Wave 2).
+ */
+export interface NatsStatus {
+  state: NatsStatusState;
+  mode: NatsStatusMode;
+  /** @nullable */
+  url?: string | null;
+  /** @nullable */
+  lastError?: string | null;
+  /** @nullable */
+  lastConnectedAt?: string | null;
+  subscribedSubjects: string[];
+}
+
 export interface HealthStatus {
   status: string;
+  nats: NatsStatus;
 }
 
 export interface SystemSummary {
@@ -20,6 +56,7 @@ export interface SystemSummary {
   activeResonance: number;
   radioStatus: string;
   observatoryStatus: string;
+  nats: NatsStatus;
 }
 
 /**
@@ -179,11 +216,38 @@ export interface OnboardArmBody {
   resonanceMode?: OnboardArmBodyResonanceMode;
 }
 
+/**
+ * Transport used for the probe. `nats` when reached over the
+constellation bus via REQ/REPLY on `KANNAKA.ask.<armId>`,
+`https` for HTTP heartbeat URLs, `local` for arms with no
+external endpoint.
+
+ * @nullable
+ */
+export type ConnectionTestResultMethod =
+  | (typeof ConnectionTestResultMethod)[keyof typeof ConnectionTestResultMethod]
+  | null;
+
+export const ConnectionTestResultMethod = {
+  nats: "nats",
+  https: "https",
+  local: "local",
+} as const;
+
 export interface ConnectionTestResult {
   ok: boolean;
   message: string;
   /** @nullable */
   latencyMs?: number | null;
+  /**
+   * Transport used for the probe. `nats` when reached over the
+constellation bus via REQ/REPLY on `KANNAKA.ask.<armId>`,
+`https` for HTTP heartbeat URLs, `local` for arms with no
+external endpoint.
+
+   * @nullable
+   */
+  method?: ConnectionTestResultMethod;
 }
 
 export type CreateTaskBodyContext = { [key: string]: unknown };
@@ -373,6 +437,10 @@ export const LogEntryEventType = {
   adapter_pull: "adapter_pull",
   dream_lite: "dream_lite",
   kannaktopus_wake: "kannaktopus_wake",
+  dream_start: "dream_start",
+  dream_end: "dream_end",
+  arm_presence_join: "arm_presence_join",
+  arm_presence_leave: "arm_presence_leave",
 } as const;
 
 export type LogEntryMetadata = { [key: string]: unknown };

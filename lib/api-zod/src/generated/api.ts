@@ -12,6 +12,23 @@ import * as zod from "zod";
  */
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
+  nats: zod
+    .object({
+      state: zod.enum([
+        "disabled",
+        "disconnected",
+        "connecting",
+        "connected",
+        "reconnecting",
+        "closed",
+      ]),
+      mode: zod.enum(["live", "mock"]),
+      url: zod.string().nullish(),
+      lastError: zod.string().nullish(),
+      lastConnectedAt: zod.coerce.date().nullish(),
+      subscribedSubjects: zod.array(zod.string()),
+    })
+    .describe("Live NATS subscriber state (per ADR-002 Wave 2)."),
 });
 
 /**
@@ -28,6 +45,23 @@ export const GetSystemSummaryResponse = zod.object({
   activeResonance: zod.number(),
   radioStatus: zod.string(),
   observatoryStatus: zod.string(),
+  nats: zod
+    .object({
+      state: zod.enum([
+        "disabled",
+        "disconnected",
+        "connecting",
+        "connected",
+        "reconnecting",
+        "closed",
+      ]),
+      mode: zod.enum(["live", "mock"]),
+      url: zod.string().nullish(),
+      lastError: zod.string().nullish(),
+      lastConnectedAt: zod.coerce.date().nullish(),
+      subscribedSubjects: zod.array(zod.string()),
+    })
+    .describe("Live NATS subscriber state (per ADR-002 Wave 2)."),
 });
 
 export const ListArmsResponseItem = zod.object({
@@ -190,6 +224,17 @@ export const TestArmConnectionResponse = zod.object({
   ok: zod.boolean(),
   message: zod.string(),
   latencyMs: zod.number().nullish(),
+  method: zod
+    .union([
+      zod.literal("nats"),
+      zod.literal("https"),
+      zod.literal("local"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe(
+      "Transport used for the probe. `nats` when reached over the\nconstellation bus via REQ\/REPLY on `KANNAKA.ask.<armId>`,\n`https` for HTTP heartbeat URLs, `local` for arms with no\nexternal endpoint.\n",
+    ),
 });
 
 export const ListTasksResponseItem = zod.object({
@@ -402,6 +447,10 @@ export const ListLogsResponseItem = zod.object({
     "adapter_pull",
     "dream_lite",
     "kannaktopus_wake",
+    "dream_start",
+    "dream_end",
+    "arm_presence_join",
+    "arm_presence_leave",
   ]),
   source: zod.string().nullish(),
   summary: zod.string(),

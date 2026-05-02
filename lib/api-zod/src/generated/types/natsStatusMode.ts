@@ -5,9 +5,11 @@
  * QueenSync — Kannaka agent orchestration & resonance control plane
  * OpenAPI spec version: 0.2.0
  */
-import type { NatsStatus } from "./natsStatus";
 
-export interface HealthStatus {
-  status: string;
-  nats: NatsStatus;
-}
+export type NatsStatusMode =
+  (typeof NatsStatusMode)[keyof typeof NatsStatusMode];
+
+export const NatsStatusMode = {
+  live: "live",
+  mock: "mock",
+} as const;
