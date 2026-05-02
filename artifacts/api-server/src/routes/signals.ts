@@ -43,51 +43,68 @@ router.post("/signals", async (req, res): Promise<void> => {
   });
   broadcast({ type: "signal_received", data: signal });
 
-  if (body.type === "build_request") {
-    const summary =
-      typeof body.payload?.summary === "string"
-        ? (body.payload.summary as string)
+  // Canonical signal -> task conversion. Every signal becomes a routable task
+  // with an inferred capability; the more "resonant" types ALSO open a
+  // resonance field so multiple arms can respond.
+  const SIGNAL_CAPABILITY: Record<string, string> = {
+    build_request: "build",
+    radio_transmission: "transmit",
+    openclaw_artifact: "artifact",
+    memory_anomaly: "audit",
+    governance_alert: "audit",
+    observation_event: "observe",
+    other: "build",
+  };
+  const RESONANCE_TYPES = new Set([
+    "memory_anomaly",
+    "governance_alert",
+    "observation_event",
+  ]);
+
+  const summary =
+    typeof body.payload?.summary === "string"
+      ? (body.payload.summary as string)
+      : typeof body.payload?.intent === "string"
+        ? (body.payload.intent as string)
         : `Handle ${body.type}`;
-    const capability =
-      typeof body.payload?.capability === "string"
-        ? (body.payload.capability as string)
-        : "build";
-    const [task] = await db
-      .insert(tasksTable)
-      .values({
-        id: nanoid(12),
-        intent: summary,
-        requiredCapability: capability,
-        priority: 6,
-        source: `signal:${body.type}`,
-        context: body.payload ?? {},
-        status: "pending",
-      })
-      .returning();
-    await db
-      .update(signalsTable)
-      .set({ status: "converted", derivedTaskId: task.id })
-      .where(eq(signalsTable.id, signal.id));
-    await recordLog({
-      eventType: "task_created",
-      source: signal.id,
-      summary: `Task derived from signal ${signal.id}`,
-      metadata: { taskId: task.id, signalId: signal.id },
-    });
-    broadcast({ type: "task_created", data: task });
-    await dispatchTask(task);
-  } else if (
-    body.type === "memory_anomaly" ||
-    body.type === "governance_alert" ||
-    body.type === "observation_event"
-  ) {
+  const capability =
+    typeof body.payload?.capability === "string"
+      ? (body.payload.capability as string)
+      : (SIGNAL_CAPABILITY[body.type] ?? "build");
+
+  const [task] = await db
+    .insert(tasksTable)
+    .values({
+      id: nanoid(12),
+      intent: summary,
+      requiredCapability: capability,
+      priority: 6,
+      source: `signal:${body.type}`,
+      context: body.payload ?? {},
+      status: "pending",
+    })
+    .returning();
+  await db
+    .update(signalsTable)
+    .set({ status: "converted", derivedTaskId: task.id })
+    .where(eq(signalsTable.id, signal.id));
+  await recordLog({
+    eventType: "task_created",
+    source: signal.id,
+    summary: `Task derived from signal ${signal.id} (${body.type} -> ${capability})`,
+    metadata: { taskId: task.id, signalId: signal.id, capability },
+  });
+  broadcast({ type: "task_created", data: task });
+  await dispatchTask(task);
+
+  if (RESONANCE_TYPES.has(body.type)) {
     const intent =
       typeof body.payload?.intent === "string"
         ? (body.payload.intent as string)
-        : `Resonate on ${body.type}`;
+        : summary;
     const tags = Array.isArray(body.payload?.tags)
       ? (body.payload.tags as string[])
-      : [body.type];
+      : [body.type, capability];
     const [field] = await db
       .insert(resonanceFieldsTable)
       .values({
@@ -95,14 +112,14 @@ router.post("/signals", async (req, res): Promise<void> => {
         intent,
         tags,
         priority: 0.7,
-        constraints: body.payload ?? {},
+        constraints: { ...(body.payload ?? {}), signalId: signal.id, taskId: task.id },
         status: "active",
         expiresAt: new Date(Date.now() + 60_000),
       })
       .returning();
     await db
       .update(signalsTable)
-      .set({ status: "converted", derivedResonanceId: field.id })
+      .set({ derivedResonanceId: field.id })
       .where(eq(signalsTable.id, signal.id));
     await recordLog({
       eventType: "resonance_created",

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import {
   db,
   signalsTable,
+  tasksTable,
   resonanceFieldsTable,
 } from "@workspace/db";
 import {
@@ -16,6 +17,7 @@ import {
 import { recordLog } from "../lib/log";
 import { broadcast } from "../lib/ws";
 import { autoLocalResonance } from "../lib/resonance";
+import { dispatchTask } from "../lib/router";
 
 const router: IRouter = Router();
 
@@ -61,6 +63,7 @@ router.post("/adapters/radio/pull", async (_req, res): Promise<void> => {
     mode: result.mode,
     signalIds: conv.signalIds,
     resonanceIds: conv.resonanceIds,
+    taskIds: conv.taskIds,
   });
 });
 
@@ -110,6 +113,7 @@ router.post(
       mode: result.mode,
       signalIds: conv.signalIds,
       resonanceIds: conv.resonanceIds,
+      taskIds: conv.taskIds,
     });
   },
 );
@@ -119,9 +123,10 @@ async function convertEventsToSignalsAndResonance(
   signalType: string,
   source: string,
   baseTag: string,
-): Promise<{ signalIds: string[]; resonanceIds: string[] }> {
+): Promise<{ signalIds: string[]; resonanceIds: string[]; taskIds: string[] }> {
   const signalIds: string[] = [];
   const resonanceIds: string[] = [];
+  const taskIds: string[] = [];
   for (const e of events) {
     const [signal] = await db
       .insert(signalsTable)
@@ -136,6 +141,27 @@ async function convertEventsToSignalsAndResonance(
     signalIds.push(signal.id);
     broadcast({ type: "signal_received", data: signal });
 
+    // Always create a task so the canonical signal -> task loop runs.
+    const [task] = await db
+      .insert(tasksTable)
+      .values({
+        id: nanoid(12),
+        intent: e.summary,
+        requiredCapability: baseTag,
+        priority: 5,
+        source: `adapter:${source}`,
+        context: { ...e.raw, signalId: signal.id, eventType: e.type },
+        status: "pending",
+      })
+      .returning();
+    taskIds.push(task.id);
+    broadcast({ type: "task_created", data: task });
+    await db
+      .update(signalsTable)
+      .set({ status: "converted", derivedTaskId: task.id })
+      .where(eq(signalsTable.id, signal.id));
+    void dispatchTask(task);
+
     const tags = Array.from(
       new Set([baseTag, ...e.type.split(".").filter(Boolean)]),
     );
@@ -146,7 +172,7 @@ async function convertEventsToSignalsAndResonance(
         intent: e.summary,
         tags,
         priority: 0.6,
-        constraints: { signalId: signal.id },
+        constraints: { signalId: signal.id, taskId: task.id },
         status: "active",
         expiresAt: new Date(Date.now() + 45_000),
       })
@@ -154,13 +180,13 @@ async function convertEventsToSignalsAndResonance(
     resonanceIds.push(field.id);
     await db
       .update(signalsTable)
-      .set({ status: "converted", derivedResonanceId: field.id })
+      .set({ derivedResonanceId: field.id })
       .where(eq(signalsTable.id, signal.id));
     await recordLog({
       eventType: "resonance_created",
       source,
       summary: `Resonance opened for adapter event: ${e.summary}`,
-      metadata: { resonanceId: field.id, signalId: signal.id },
+      metadata: { resonanceId: field.id, signalId: signal.id, taskId: task.id },
     });
     broadcast({
       type: "resonance_created",
@@ -168,7 +194,7 @@ async function convertEventsToSignalsAndResonance(
     });
     void autoLocalResonance(field);
   }
-  return { signalIds, resonanceIds };
+  return { signalIds, resonanceIds, taskIds };
 }
 
 export default router;

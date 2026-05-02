@@ -7,6 +7,7 @@ import { recordLog } from "../lib/log";
 import { broadcast } from "../lib/ws";
 import { dispatchTask } from "../lib/router";
 import { evaluateMemory } from "../lib/memory-gate";
+import { verifyCallbackAuth } from "../lib/auth";
 
 const router: IRouter = Router();
 
@@ -95,6 +96,11 @@ router.post("/tasks/:id/callback", async (req, res): Promise<void> => {
     return;
   }
   const body = parsed.data;
+  const auth = verifyCallbackAuth(req, id, body.status);
+  if (!auth.ok) {
+    res.status(401).json({ error: `callback rejected: ${auth.reason}` });
+    return;
+  }
   const [task] = await db
     .select()
     .from(tasksTable)

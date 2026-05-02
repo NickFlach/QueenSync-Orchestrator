@@ -10,6 +10,7 @@ import {
 import { OnboardArmBody } from "@workspace/api-zod";
 import { recordLog } from "../lib/log";
 import { broadcast } from "../lib/ws";
+import { validateOutboundUrl, logBlockedUrl } from "../lib/url-guard";
 
 const router: IRouter = Router();
 
@@ -141,10 +142,21 @@ router.post("/arms/:id/test-connection", async (req, res): Promise<void> => {
     });
     return;
   }
+  const guard = validateOutboundUrl(targetUrl);
+  if (!guard.ok) {
+    logBlockedUrl("test-connection", targetUrl, guard.reason ?? "blocked");
+    res.status(400).json({
+      ok: false,
+      message: `Refused to probe ${targetUrl}: ${guard.reason}`,
+      latencyMs: 0,
+    });
+    return;
+  }
   const start = Date.now();
   try {
     const r = await fetch(targetUrl, {
       signal: AbortSignal.timeout(4000),
+      redirect: "manual",
     });
     res.json({
       ok: r.ok,

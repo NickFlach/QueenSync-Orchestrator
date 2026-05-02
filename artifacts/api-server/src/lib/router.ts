@@ -4,6 +4,8 @@ import { recordLog } from "./log";
 import { broadcast } from "./ws";
 import { evaluateMemory } from "./memory-gate";
 import { logger } from "./logger";
+import { applyArmAuthHeaders, signCallback } from "./auth";
+import { validateOutboundUrl, logBlockedUrl } from "./url-guard";
 
 export async function pickArmForCapability(
   requiredCapability: string,
@@ -124,6 +126,16 @@ function callbackUrlFor(taskId: string): string {
 
 async function dispatchExternal(task: Task, arm: Arm) {
   if (!arm.endpointUrl) return;
+  const guard = validateOutboundUrl(arm.endpointUrl);
+  if (!guard.ok) {
+    logBlockedUrl("dispatchExternal", arm.endpointUrl, guard.reason ?? "blocked");
+    await failTask(
+      task,
+      arm,
+      `Refused to dispatch to ${arm.endpointUrl}: ${guard.reason}`,
+    );
+    return;
+  }
   const callbackUrl = callbackUrlFor(task.id);
   const payload = {
     taskId: task.id,
@@ -135,8 +147,14 @@ async function dispatchExternal(task: Task, arm: Arm) {
     armId: arm.id,
   };
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (arm.authMethod === "bearer" && process.env["QUEENSYNC_API_KEY"]) {
-    headers["Authorization"] = `Bearer ${process.env["QUEENSYNC_API_KEY"]}`;
+  applyArmAuthHeaders(arm.authMethod, headers);
+  // Provide HMAC the receiving arm should echo on its callback so we can
+  // accept it via /api/tasks/:id/callback. Successful callback must match.
+  const completedSig = signCallback(task.id, "completed");
+  const failedSig = signCallback(task.id, "failed");
+  if (completedSig && failedSig) {
+    headers["X-QueenSync-Completed-Signature"] = completedSig;
+    headers["X-QueenSync-Failed-Signature"] = failedSig;
   }
   try {
     const r = await fetch(arm.endpointUrl, {
