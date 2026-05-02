@@ -166,8 +166,7 @@ export default function ArmsRegistry() {
       onSuccess: (resp) => {
         toast({ title: "Arm Onboarded", description: name });
         queryClient.invalidateQueries({ queryKey: getListArmsQueryKey() });
-        const secret = (resp as { oneTimeSecret?: string | null })
-          .oneTimeSecret;
+        const secret = resp.oneTimeSecret;
         if (secret) {
           // Wave 5: surface the auto-generated per-arm secret immediately
           // — it's the operator's only chance to capture it before the
@@ -753,7 +752,7 @@ function ArmCredentialPanel({
           onClick={() => rotate.mutate({ id: armId })}
           data-testid="button-rotate-credential"
         >
-          {rotate.isPending ? "Rotating…" : "Rotate"}
+          {rotate.isPending ? "Rotating…" : "Rotate credential"}
         </Button>
       </div>
       <Dialog
