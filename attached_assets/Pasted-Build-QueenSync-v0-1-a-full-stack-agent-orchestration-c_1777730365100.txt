@@ -1,0 +1,185 @@
+Build QueenSync v0.1: a full-stack agent orchestration control plane for the Kannaka ecosystem.
+
+Goal:
+Create a working “Queen Console” that coordinates Kannaktopus arms, routes tasks, ingests signals, gates memory writes, and logs all activity.
+
+Tech stack:
+- Frontend: React + Vite
+- Backend: Node.js + Express
+- Realtime: WebSockets
+- Storage: SQLite or JSON fallback
+- API-first design
+- Clean modular repo structure
+
+Core concepts:
+- Kannaka = Queen / identity / intent
+- QueenSync = coordination layer
+- Kannaktopus = distributed agent execution mesh
+- Arms = specialist agents
+- Signals = external/internal inputs
+- Memory Gate = filter before persistence
+- Execution Log = system trace
+
+Build these backend modules:
+
+1. Agent Registry
+- Register arms
+- Track status: idle, busy, failed, offline
+- Capabilities list
+- Heartbeat timestamp
+- Seed default arms:
+  - architect_01: builder, codegen, prd, planning
+  - atelier_01: creative, image_prompt, music_prompt, symbolic_art
+  - signal_keeper_01: ingestion, radio, openclaw
+  - memory_keeper_01: memory, dedupe, compression, dream_lite
+  - auditor_01: validation, governance, risk_review
+
+2. Task Router
+- Create task with intent, priority, required capability, source
+- Match to available arm by capability
+- Assign task automatically
+- Simulate execution with async delay
+- Mark completed/failed
+- Store result summary
+- Support retry
+
+3. Signal Ingestion
+- Manual signal input endpoint
+- Signal normalization
+- Convert signal into task
+- Seed simulated signal types:
+  - radio_transmission
+  - openclaw_artifact
+  - memory_anomaly
+  - build_request
+  - governance_alert
+
+4. Memory Gate
+- Score memory event importance from 0.0 to 1.0
+- Deduplicate simple similar content
+- Approve/reject writes
+- Tag approved memory:
+  - agent_output
+  - signal
+  - decision
+  - artifact
+  - system_event
+- Simulate integration with kannaka-memory using a local memory_events table/file
+- Include placeholder adapter comments for future real repo integration:
+  - github.com/NickFlach/kannaka-memory
+
+5. Execution Log
+- Log every major event:
+  - arm_registered
+  - signal_received
+  - task_created
+  - task_assigned
+  - task_completed
+  - memory_approved
+  - memory_rejected
+  - task_failed
+- Include timestamp, event_type, source, summary, metadata
+
+6. API Routes
+Create REST endpoints:
+- GET /api/health
+- GET /api/arms
+- POST /api/arms
+- POST /api/arms/:id/heartbeat
+- GET /api/tasks
+- POST /api/tasks
+- POST /api/tasks/:id/retry
+- GET /api/signals
+- POST /api/signals
+- GET /api/memory
+- POST /api/memory/evaluate
+- GET /api/logs
+
+7. WebSocket Events
+Broadcast live updates for:
+- arms_updated
+- task_created
+- task_assigned
+- task_completed
+- signal_received
+- memory_event
+- log_event
+
+Frontend Queen Console:
+Create a beautiful dark UI with:
+- Header: QueenSync / Kannaka Control Plane
+- System status cards:
+  - active arms
+  - queued tasks
+  - completed tasks
+  - memory approvals
+  - recent signals
+- Agent Registry panel
+- Task Board panel with pending/active/completed/failed
+- Signal Feed panel with manual signal input form
+- Memory Stream panel showing approved/rejected memory events
+- Execution Log timeline
+- “Create Task” form
+- “Inject Signal” form
+- “Wake Kannaktopus” button that creates several demo signals/tasks
+- “Dream Lite Compression” button that simulates memory compaction
+
+Design style:
+- Futuristic command center
+- Dark background
+- Subtle neon accents
+- Cards, badges, status dots
+- Clear operational readability
+- No overdone gimmicks
+- Make it feel alive
+
+Important behavior:
+- On startup seed demo arms
+- User can create tasks manually
+- Signals should create tasks automatically
+- Tasks should assign to arms based on capability
+- Completed tasks should pass through Memory Gate
+- Approved memory events should appear in Memory Stream
+- Everything should appear in Execution Log
+- UI should update live without refresh
+
+Repo structure:
+- /server
+  - index.js
+  - db.js
+  - registry.js
+  - router.js
+  - signals.js
+  - memoryGate.js
+  - logs.js
+  - websocket.js
+- /client
+  - React app
+  - components for each panel
+- README.md
+- .env.example
+
+README should include:
+- What QueenSync is
+- How it maps to Kannaka / Kannaktopus
+- How to run locally
+- API route list
+- Future repo integration notes:
+  - kannaka-memory = real memory persistence and HRM/dream_lite
+  - kannaka-radio = signal source
+  - kannaka-eye = perception source
+  - kannaktopus = formal execution mesh
+
+Push this beyond a toy:
+- Use real state management
+- Keep modules clean
+- Add error handling
+- Add useful sample data
+- Make UI genuinely usable
+- Ensure Replit runs with one command
+- Prefer simple working implementation over abstract stubs
+
+Final deliverable:
+A running QueenSync v0.1 app in Replit that demonstrates the full loop:
+
+Signal → Task → Arm → Result → Memory Gate → Execution Log → Live UI

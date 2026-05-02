@@ -1,0 +1,135 @@
+Update QueenSync v0.1 into QueenSync v0.2 with external Kannaka site integration and universal agent onboarding.
+
+Deployment target:
+- Production domain: ninja-portal.com
+- Existing active Kannaka interfaces:
+  - radio.ninja-portal.com
+  - observatory.ninja-portal.com
+
+New core requirement:
+QueenSync must support onboarding ANY agent, not just built-in Kannaktopus arms.
+
+Add “Agent Onboarding” as a first-class feature.
+
+Agent types:
+- human-configured agent
+- API agent
+- local simulated agent
+- Replit-hosted agent
+- OpenClaw agent
+- external webhook agent
+- future MCP-compatible agent
+
+Agent onboarding flow:
+1. User clicks “Onboard Agent”
+2. User enters:
+   - agent name
+   - agent type
+   - endpoint URL
+   - capabilities
+   - auth method: none, API key, bearer token, future JWT
+   - heartbeat URL optional
+   - description / role
+3. QueenSync tests connection if endpoint provided
+4. Agent is added to registry
+5. Agent becomes eligible for task routing
+6. Agent actions are logged
+7. Agent outputs pass through Memory Gate
+
+Agent schema:
+{
+  "agent_id": "uuid",
+  "name": "Kannaka Radio Agent",
+  "type": "external_webhook",
+  "endpoint_url": "https://radio.ninja-portal.com/api/agent",
+  "heartbeat_url": "https://radio.ninja-portal.com/api/health",
+  "capabilities": ["radio", "signal_ingestion", "transmission_analysis"],
+  "auth_method": "none",
+  "status": "pending",
+  "description": "Radio signal interface for Kannaka transmissions"
+}
+
+Add site adapters:
+
+1. Kannaka Radio Adapter
+- Base URL: https://radio.ninja-portal.com
+- Purpose: signal ingestion, transmissions, radio events
+- Add placeholder routes:
+  - GET /api/adapters/radio/health
+  - GET /api/adapters/radio/signals
+  - POST /api/adapters/radio/pull
+
+2. Kannaka Observatory Adapter
+- Base URL: https://observatory.ninja-portal.com
+- Purpose: observation layer, system telemetry, artifacts, status, constellation events
+- Add placeholder routes:
+  - GET /api/adapters/observatory/health
+  - GET /api/adapters/observatory/events
+  - POST /api/adapters/observatory/pull
+
+If live endpoints are unavailable, fail gracefully and allow manual mock mode.
+
+Queen Console UI additions:
+- Agent Onboarding panel
+- External Sites panel
+  - Radio status
+  - Observatory status
+  - Pull signals/events buttons
+- Agent detail view
+  - endpoint
+  - capabilities
+  - last heartbeat
+  - recent tasks
+  - memory contribution count
+- Connection test button
+- Auth configuration placeholder
+
+Task router update:
+- Route tasks to any onboarded agent based on capabilities
+- If agent has endpoint_url, send task payload via POST
+- If no endpoint_url, simulate local execution
+- Store response as task result
+- Pass result to Memory Gate
+
+External agent task payload:
+{
+  "task_id": "uuid",
+  "intent": "analyze radio transmission",
+  "required_capability": "radio",
+  "priority": 8,
+  "source": "queensync",
+  "context": {},
+  "callback_url": "https://ninja-portal.com/api/tasks/:id/callback"
+}
+
+Callback route:
+- POST /api/tasks/:id/callback
+- Allows external agents to return results asynchronously
+- Updates task status
+- Sends result to Memory Gate
+- Logs completion
+
+Security:
+- Add API key support for onboarded agents
+- Store secrets in environment variables when possible
+- Never expose tokens in frontend
+- Add future JWT placeholder for OpenClaw / agent identity
+
+Deployment notes:
+- Configure app for deployment at ninja-portal.com
+- Use environment variables:
+  - QUEENSYNC_BASE_URL=https://ninja-portal.com
+  - RADIO_BASE_URL=https://radio.ninja-portal.com
+  - OBSERVATORY_BASE_URL=https://observatory.ninja-portal.com
+  - QUEENSYNC_API_KEY=
+  - NODE_ENV=production
+
+Update README with:
+- How to onboard an agent
+- How external agents receive tasks
+- How callbacks work
+- How radio and observatory integrations fit
+- Future MCP compatibility
+- Future kannaka-memory, kannaka-radio, kannaka-observatory repo integration
+
+Do not hardcode Kannaka-only logic. QueenSync should become a universal agent control plane where Kannaka is the first sovereign ecosystem.

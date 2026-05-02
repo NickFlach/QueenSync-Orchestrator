@@ -1,0 +1,264 @@
+Upgrade QueenSync into a hybrid orchestration + resonance system.
+
+Add a new subsystem: Resonance Control Protocol (RCP)
+
+Goal:
+Allow agents to respond to intent fields (resonance) instead of only being explicitly assigned tasks.
+
+Do NOT remove deterministic task routing. Both systems must coexist.
+
+---
+
+CORE CONCEPTS
+
+1. Task = explicit instruction (existing system)
+2. Resonance = broadcast intent field (new system)
+
+QueenSync must support both simultaneously.
+
+---
+
+BACKEND ADDITIONS
+
+Create new module:
+
+/server/resonance.js
+
+---
+
+1. Resonance Registry
+
+Maintain active resonance fields.
+
+Resonance schema:
+{
+  "resonance_id": "uuid",
+  "intent": "analyze_radio_signal",
+  "tags": ["radio", "analysis", "signal"],
+  "priority": 0.9,
+  "constraints": {
+    "latency": "low"
+  },
+  "status": "active",
+  "created_at": "...",
+  "expires_at": "...",
+  "responses": []
+}
+
+---
+
+2. Agent Resonance Profile
+
+Extend existing agent schema:
+
+{
+  "agent_id": "radio_agent_01",
+  "capabilities": ["radio", "signal_ingestion"],
+  "resonance_profile": {
+    "tags": ["radio", "frequency", "analysis"],
+    "sensitivity": 0.8,
+    "mode": "auto" // auto, passive, off
+  }
+}
+
+---
+
+3. Matching Engine
+
+Implement simple scoring:
+
+score =
+  (tag_overlap_count / total_tags) * 0.5 +
+  (priority * 0.3) +
+  (agent_availability * 0.2)
+
+Only allow response if score > threshold (0.5 default)
+
+---
+
+4. Resonance Lifecycle
+
+- Create resonance
+- Broadcast to agents (internal + external)
+- Agents evaluate and respond
+- Collect responses
+- QueenSync selects outcome:
+  - best response
+  - merge responses
+  - no action
+
+---
+
+5. API Routes
+
+POST /api/resonance
+- create resonance field
+
+GET /api/resonance
+- list active resonance
+
+POST /api/resonance/:id/respond
+- agent submits response
+
+POST /api/resonance/:id/resolve
+- QueenSync resolves (auto or manual)
+
+---
+
+6. Agent Behavior
+
+For local agents:
+- auto-check active resonance every few seconds
+- evaluate match score
+- respond if above threshold
+
+For external agents:
+- expose endpoint:
+  GET /api/resonance/active
+- allow polling OR future webhook push
+
+---
+
+7. Response Schema
+
+{
+  "response_id": "uuid",
+  "resonance_id": "...",
+  "agent_id": "...",
+  "score": 0.82,
+  "output": "...",
+  "timestamp": "..."
+}
+
+---
+
+8. Resolution Logic
+
+QueenSync must:
+
+- pick highest score OR
+- merge outputs (simple concat for now)
+- mark resonance as completed
+
+---
+
+9. Memory Integration
+
+Every resolved resonance creates memory event:
+
+{
+  "type": "resonance_event",
+  "intent": "...",
+  "agents": ["agent_1", "agent_2"],
+  "selected_agent": "...",
+  "coherence_score": 0.87,
+  "output": "...",
+  "timestamp": "..."
+}
+
+Pass through existing Memory Gate.
+
+---
+
+FRONTEND ADDITIONS (Queen Console)
+
+Add new panel: “Resonance Field”
+
+Features:
+- create resonance (intent + tags)
+- view active fields
+- show responding agents in real time
+- display scores
+- highlight selected outcome
+
+Add visual:
+- “field pulse” animation for active resonance
+- show multiple agents responding simultaneously
+
+---
+
+UI PANELS UPDATE
+
+Add:
+- Resonance Feed
+- Agent Response View
+- Resolution Summary
+
+---
+
+HYBRID LOGIC
+
+When to use what:
+
+If task requires guaranteed execution:
+→ use task router
+
+If task is exploratory / creative / signal-driven:
+→ use resonance
+
+Example:
+- “deploy service” → task
+- “interpret radio transmission” → resonance
+
+---
+
+INTEGRATION WITH EXISTING SITES
+
+Radio:
+- incoming transmissions auto-create resonance:
+  intent: "analyze_radio_signal"
+  tags: ["radio", "signal"]
+
+Observatory:
+- events create resonance:
+  intent: "interpret_observation"
+  tags: ["observation", "anomaly", "pattern"]
+
+---
+
+IMPORTANT RULES
+
+- System must work even if zero agents respond
+- System must allow multiple responses
+- Do NOT block UI waiting for responses
+- Everything must be logged
+
+---
+
+DEMO MODE
+
+Add button:
+
+“Trigger Resonance Storm”
+
+Creates:
+- 3–5 simultaneous resonance fields
+- different tags
+- watch agents respond live
+
+---
+
+README UPDATE
+
+Add section:
+
+“Resonance Control Protocol (RCP)”
+
+Explain:
+- difference from tasks
+- how agents participate
+- how external agents can integrate
+
+---
+
+FINAL REQUIREMENT
+
+The system must demonstrate:
+
+Task Mode:
+User creates task → assigned → completed → memory
+
+Resonance Mode:
+Signal or user creates resonance → multiple agents respond → system resolves → memory
+
+Both visible live in UI.
