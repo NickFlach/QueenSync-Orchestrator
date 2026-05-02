@@ -262,14 +262,32 @@ A "Restart Radio" button on the radio arm dispatches a task to the
   runbook (build → rsync → install env file → install sudoers fragment →
   enable systemd unit → verify `/healthz`).
 - **Heartbeat scheduler.** `lib/heartbeat-scheduler.ts` runs every 60s
-  (configurable, default `DEFAULT_HEARTBEAT_INTERVAL_MS = 60_000`),
-  selects arms whose `lastHeartbeat` is older than
-  `QUEENSYNC_ARM_STALE_MS` (default 180000ms) and whose status is not
-  `offline`/`failed`, demotes them to `offline`, broadcasts
-  `arms_updated`, and writes an `arm_marked_offline` log entry per arm.
-  Started from `artifacts/api-server/src/index.ts`. Arms that have
-  never heartbeated (lastHeartbeat IS NULL) are intentionally left alone
-  so seeded `offline` rows don't churn.
+  (configurable, default `DEFAULT_HEARTBEAT_INTERVAL_MS = 60_000`).
+  Each tick has two phases:
+  1. **Active probe (`probeHeartbeatUrls`).** GETs every arm's
+     `heartbeatUrl` (5s timeout via `AbortSignal.timeout`). On 2xx, sets
+     `lastHeartbeat = now()`; if the arm was `offline`, restores it to
+     `idle` and broadcasts `arms_updated`. On non-2xx or thrown error,
+     leaves `lastHeartbeat` alone — the staleness sweep handles eventual
+     demotion.
+  2. **Staleness sweep (`sweepStaleHeartbeats`).** Selects arms whose
+     `lastHeartbeat` is older than `QUEENSYNC_ARM_STALE_MS` (default
+     180000ms) and whose status is not `offline`/`failed`, demotes them
+     to `offline` (compare-and-set on UPDATE), broadcasts `arms_updated`,
+     and writes an `arm_marked_offline` log entry per arm.
+
+  To make sure freshly-seeded arms are actually subject to the sweep,
+  `seedDefaults()` bootstraps `lastHeartbeat = now()` on insert for any
+  arm that has a `heartbeatUrl`, and the reconcile loop bumps existing
+  rows whose `heartbeatUrl` is set but `lastHeartbeat` is NULL. So if the
+  real radio/observatory/oracle-admin services are unreachable from boot,
+  the active probe never refreshes them and the sweep demotes them to
+  `offline` after `QUEENSYNC_ARM_STALE_MS`. Started from
+  `artifacts/api-server/src/index.ts`. NATS-only arms (kannaktopus arms
+  with no `heartbeatUrl` — `kannaka-prime`, `swarm-worker`) are
+  intentionally left with `lastHeartbeat = NULL`; their availability is
+  tracked via the NATS bridge's presence join/leave events (follow-up
+  #20), not the HTTP probe, so the sweep skips them.
 - **Queen Console — quick actions.** `artifacts/queensync/src/pages/arms.tsx`
   ArmDetailDialog now renders a "Quick Actions" panel. Each entry has a
   capability AND a `targetArmIds` list; the button shows on either the
@@ -291,9 +309,13 @@ A "Restart Radio" button on the radio arm dispatches a task to the
   exercises sign/verify round-trips, header constants, and the
   unset-secret no-op path. `…/heartbeat-scheduler.test.ts` covers
   stale-vs-fresh demotion, the offline/failed bypass, the never-pinged
-  bypass, and the `staleMs` override. `…/seed.test.ts` covers
-  real-only / mocks-on / mocks-off-cleanup / oracle-admin shape /
-  default-status assertions.
+  bypass, the `staleMs` override, the active-probe success/failure paths
+  (refresh on 2xx, offline → idle recovery, no-op on probe failure), and
+  the end-to-end "seeded baseline arm whose probe never succeeds gets
+  demoted by the sweep" path. `…/seed.test.ts` covers real-only /
+  mocks-on / mocks-off-cleanup / oracle-admin shape / default-status
+  assertions and asserts that arms with `heartbeatUrl` get a bootstrap
+  `lastHeartbeat`, while NATS-only arms stay NULL.
 
 **Out of scope for Wave 3** (deferred to follow-ups):
 per-arm rotating credentials (#17), oracle-admin runtime hardening

@@ -14,7 +14,20 @@ const PORT = Number(process.env["PORT"] ?? 8090);
 // for a trusted private network, set ORACLE_ADMIN_HOST=0.0.0.0 explicitly.
 const HOST = process.env["ORACLE_ADMIN_HOST"] ?? "127.0.0.1";
 const SECRET = process.env["QUEENSYNC_ORACLE_ADMIN_HMAC_SECRET"] ?? "";
-const REQUIRE_SIG = process.env["ORACLE_ADMIN_ALLOW_UNSIGNED"] !== "true";
+const ALLOW_UNSIGNED = process.env["ORACLE_ADMIN_ALLOW_UNSIGNED"] === "true";
+const REQUIRE_SIG = !ALLOW_UNSIGNED;
+
+// Production safety: refuse to start if the operator has disabled HMAC
+// verification outside an explicit development environment. Unsigned
+// dispatch is a privileged-execution escape hatch and must never silently
+// run in production.
+if (ALLOW_UNSIGNED && process.env["NODE_ENV"] === "production") {
+  logger.fatal(
+    "ORACLE_ADMIN_ALLOW_UNSIGNED=true is forbidden when NODE_ENV=production. " +
+      "Unset the variable or run with NODE_ENV=development.",
+  );
+  process.exit(1);
+}
 
 if (!SECRET && REQUIRE_SIG) {
   logger.warn(
