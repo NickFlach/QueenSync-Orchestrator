@@ -1,0 +1,125 @@
+You are Agent 4 working on QueenSync v1.0.
+
+QueenSync is the agent operating layer for the Kannaka ecosystem. v0.1 and v0.2 are already being built. Your job is to work through the v1.0 arc in waves, preserving existing functionality while pushing toward a durable, deployable system.
+
+Do not rewrite the app from scratch unless absolutely necessary. Inspect the current codebase first, understand existing modules, then evolve it.
+
+Primary v1.0 goal:
+Any agent can onboard, receive deterministic tasks, respond to Resonance Control Protocol fields, return outputs, pass through Memory Gate, and be observable from the Queen Console deployed at ninja-portal.com.
+
+Wave 1 — Stabilize the Core
+- Review existing backend/frontend structure.
+- Ensure app runs cleanly with one command in Replit.
+- Fix broken imports, routing issues, missing env vars, WebSocket bugs, and state inconsistencies.
+- Ensure task mode works end-to-end:
+  Task created → matched to agent → executed/simulated → completed → memory evaluated → log updated → UI updates live.
+- Ensure resonance mode works end-to-end:
+  Resonance created → agents score/respond → field resolved → memory evaluated → log updated → UI updates live.
+- Add defensive error handling and useful empty states.
+
+Wave 2 — Universal Agent Onboarding
+- Build or refine Agent Onboarding UI.
+- Support agent types:
+  local_simulated, external_webhook, replit_agent, api_agent, openclaw_agent, future_mcp_agent.
+- Agent fields:
+  name, type, endpoint_url, heartbeat_url, capabilities, resonance tags, sensitivity, auth_method, description.
+- Add connection test behavior.
+- External agents should be eligible for task routing.
+- If endpoint_url exists, send task payload by POST.
+- If no endpoint_url, simulate local execution.
+- Add callback endpoint for async external agent results:
+  POST /api/tasks/:id/callback
+
+Wave 3 — Ninja Portal Integrations
+- Add configurable environment variables:
+  QUEENSYNC_BASE_URL=https://ninja-portal.com
+  RADIO_BASE_URL=https://radio.ninja-portal.com
+  OBSERVATORY_BASE_URL=https://observatory.ninja-portal.com
+  QUEENSYNC_API_KEY=
+  NODE_ENV=
+- Add adapters:
+  /api/adapters/radio/health
+  /api/adapters/radio/signals
+  /api/adapters/radio/pull
+  /api/adapters/observatory/health
+  /api/adapters/observatory/events
+  /api/adapters/observatory/pull
+- If live endpoints fail, use mock mode gracefully.
+- Radio transmissions should create resonance fields tagged radio/signal/analysis.
+- Observatory events should create resonance fields tagged observation/anomaly/pattern.
+
+Wave 4 — Memory Governance
+- Improve Memory Gate:
+  importance score
+  simple dedupe
+  tag classification
+  approve/reject
+  summarization field
+  source attribution
+- Add placeholder adapter comments for real integration with:
+  github.com/NickFlach/kannaka-memory
+- Add Dream Lite Compression button/action:
+  group recent memory events
+  summarize them
+  mark originals as compacted
+  create compressed memory event
+- Never let failed/noisy events silently disappear; log rejected events.
+
+Wave 5 — Queen Console v1.0
+- Make UI feel like a real operations console, not a toy.
+- Required panels:
+  System Status
+  Agent Registry
+  Agent Onboarding
+  Task Board
+  Resonance Field
+  External Sites
+  Signal Feed
+  Memory Stream
+  Execution Log
+- Add useful filters:
+  by status, agent, source, event type.
+- Add “Wake Kannaktopus” demo.
+- Add “Trigger Resonance Storm” demo.
+- Add “Dream Lite Compression” demo.
+- Keep design dark, clean, readable, futuristic, operational.
+
+Wave 6 — Deployability and Documentation
+- Ensure production build works.
+- Add README sections:
+  What QueenSync is
+  v1.0 architecture
+  How to run
+  How to deploy to ninja-portal.com
+  How to onboard agents
+  How external task callbacks work
+  How RCP works
+  Radio/Observatory integration
+  Future MCP compatibility
+  Future kannaka-memory integration
+- Add .env.example.
+- Add clear API route list.
+- Add known limitations.
+
+Important architecture:
+QueenSync = palace/control plane.
+Kannaktopus = native staff/execution mesh.
+Kannaka Radio = signal organ.
+Kannaka Observatory = observation organ.
+kannaka-memory = identity/memory substrate.
+RCP = resonance layer for emergent agent response.
+
+Do not collapse this into a chatbot.
+Do not build only static UI.
+The end-to-end loops must actually work.
+
+Definition of done for v1.0:
+- A new agent can be onboarded.
+- A task can be routed to that agent.
+- A resonance field can receive agent responses.
+- Radio/Observatory adapters exist and fail gracefully.
+- Memory Gate approves/rejects outputs.
+- Dream Lite compression works in demo form.
+- All major events are logged.
+- UI updates live.
+- README explains how to continue development.
