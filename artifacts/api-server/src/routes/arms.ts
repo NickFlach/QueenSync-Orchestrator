@@ -11,6 +11,7 @@ import { OnboardArmBody } from "@workspace/api-zod";
 import { recordLog } from "../lib/log";
 import { broadcast } from "../lib/ws";
 import { validateOutboundUrl, logBlockedUrl } from "../lib/url-guard";
+import { safeFetch, BlockedUrlError } from "../lib/safe-fetch";
 
 const router: IRouter = Router();
 
@@ -29,6 +30,21 @@ router.post("/arms", async (req, res): Promise<void> => {
     return;
   }
   const body = parsed.data;
+  for (const [field, value] of [
+    ["endpointUrl", body.endpointUrl],
+    ["heartbeatUrl", body.heartbeatUrl],
+  ] as const) {
+    if (value == null || value === "") continue;
+    const guard = validateOutboundUrl(value);
+    if (!guard.ok) {
+      logBlockedUrl(`onboard:${field}`, value, guard.reason ?? "blocked");
+      res.status(400).json({
+        error: `Invalid ${field}: ${guard.reason}`,
+        field,
+      });
+      return;
+    }
+  }
   const [row] = await db
     .insert(armsTable)
     .values({
@@ -154,9 +170,9 @@ router.post("/arms/:id/test-connection", async (req, res): Promise<void> => {
   }
   const start = Date.now();
   try {
-    const r = await fetch(targetUrl, {
+    const r = await safeFetch(targetUrl, {
       signal: AbortSignal.timeout(4000),
-      redirect: "manual",
+      context: "test-connection",
     });
     res.json({
       ok: r.ok,
@@ -166,6 +182,14 @@ router.post("/arms/:id/test-connection", async (req, res): Promise<void> => {
       latencyMs: Date.now() - start,
     });
   } catch (err) {
+    if (err instanceof BlockedUrlError) {
+      res.status(400).json({
+        ok: false,
+        message: `Refused to probe ${targetUrl}: ${err.reason}`,
+        latencyMs: Date.now() - start,
+      });
+      return;
+    }
     res.json({
       ok: false,
       message: `Unreachable: ${(err as Error).message}`,

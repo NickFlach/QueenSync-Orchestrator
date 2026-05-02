@@ -1,4 +1,5 @@
 import { logger } from "./logger";
+import { safeFetch, BlockedUrlError } from "./safe-fetch";
 
 export type AdapterMode = "live" | "mock";
 
@@ -28,10 +29,11 @@ async function tryFetch(
       ...((init?.headers as Record<string, string>) ?? {}),
     };
     if (QUEENSYNC_API_KEY) headers["Authorization"] = `Bearer ${QUEENSYNC_API_KEY}`;
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       ...init,
       headers,
       signal: AbortSignal.timeout(4000),
+      context: "adapter",
     });
     const body = await res.text();
     return {
@@ -41,7 +43,11 @@ async function tryFetch(
       latencyMs: Date.now() - start,
     };
   } catch (err) {
-    logger.warn({ err, url }, "adapter fetch failed");
+    if (err instanceof BlockedUrlError) {
+      logger.warn({ url, reason: err.reason }, "adapter fetch blocked by url-guard");
+    } else {
+      logger.warn({ err, url }, "adapter fetch failed");
+    }
     return { ok: false, status: 0, body: "", latencyMs: Date.now() - start };
   }
 }
