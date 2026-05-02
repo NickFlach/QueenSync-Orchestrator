@@ -231,6 +231,8 @@ importers:
         specifier: 'catalog:'
         version: 4.21.0
 
+  artifacts/canary: {}
+
   artifacts/mockup-sandbox:
     devDependencies:
       '@hookform/resolvers':
