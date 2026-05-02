@@ -265,7 +265,16 @@ export async function seedDefaults() {
 
   const missing = targetArms.filter((a) => !existingIds.has(a.id));
   if (missing.length > 0) {
-    await db.insert(armsTable).values(missing as never);
+    // For arms that have a heartbeatUrl, bootstrap lastHeartbeat = now() so
+    // the staleness sweep has a baseline. If the actual service is down,
+    // the active probe will fail to refresh and the sweep will demote the
+    // arm to `offline` after QUEENSYNC_ARM_STALE_MS (default 3 minutes).
+    const now = new Date();
+    const toInsert = missing.map((a) => {
+      const hb = (a as { heartbeatUrl?: string }).heartbeatUrl;
+      return hb ? { ...a, lastHeartbeat: now } : a;
+    });
+    await db.insert(armsTable).values(toInsert as never);
     logger.info(
       {
         count: missing.length,
@@ -311,7 +320,10 @@ export async function seedDefaults() {
 
   // Reconcile capability/endpoint drift on existing real-arm rows so the
   // ADR's required capability set is the source of truth even when an arm
-  // row was inserted by an earlier seed revision.
+  // row was inserted by an earlier seed revision. Also bootstrap a
+  // lastHeartbeat timestamp on rows that have a heartbeatUrl but never
+  // got pinged — without it, the staleness sweep can never demote them
+  // (it intentionally skips NULL lastHeartbeat).
   for (const target of REAL_ARMS) {
     const row = existing.find((r) => r.id === target.id);
     if (!row) continue;
@@ -321,17 +333,19 @@ export async function seedDefaults() {
     const urlDiffers =
       (target as { endpointUrl?: string }).endpointUrl !== undefined &&
       row.endpointUrl !== (target as { endpointUrl?: string }).endpointUrl;
-    if (!capsDiffer && !urlDiffers) continue;
+    const targetHb = (target as { heartbeatUrl?: string }).heartbeatUrl;
+    const needsBootstrapHb = Boolean(targetHb) && row.lastHeartbeat === null;
+    if (!capsDiffer && !urlDiffers && !needsBootstrapHb) continue;
     const patch: Record<string, unknown> = {};
     if (capsDiffer) patch["capabilities"] = [...target.capabilities];
     if (urlDiffers) {
       patch["endpointUrl"] = (target as { endpointUrl?: string }).endpointUrl;
-      patch["heartbeatUrl"] =
-        (target as { heartbeatUrl?: string }).heartbeatUrl ?? row.heartbeatUrl;
+      patch["heartbeatUrl"] = targetHb ?? row.heartbeatUrl;
     }
+    if (needsBootstrapHb) patch["lastHeartbeat"] = new Date();
     await db.update(armsTable).set(patch).where(eq(armsTable.id, target.id));
     logger.info(
-      { id: target.id, capsDiffer, urlDiffers },
+      { id: target.id, capsDiffer, urlDiffers, bootstrappedHeartbeat: needsBootstrapHb },
       "reconciled real-arm row to current ADR-002 capability/endpoint set",
     );
   }

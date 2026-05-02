@@ -93,27 +93,35 @@ describe("seedDefaults", () => {
     }
   });
 
-  it("real arms default to status=idle (dispatchable; demoted to offline by heartbeat sweep if they go silent)", async () => {
+  it("real arms default to status=idle; arms with heartbeatUrl get a baseline lastHeartbeat (so the staleness sweep can later demote them); NATS-only arms stay NULL", async () => {
     delete process.env["QUEENSYNC_SEED_MOCK_ARMS"];
     await seedDefaults();
     const rows = await db
       .select({
         id: armsTable.id,
         status: armsTable.status,
+        heartbeatUrl: armsTable.heartbeatUrl,
         lastHeartbeat: armsTable.lastHeartbeat,
       })
       .from(armsTable)
       .where(inArray(armsTable.id, REAL_IDS));
     for (const r of rows) {
       assert.equal(r.status, "idle", `${r.id} expected idle, got ${r.status}`);
-      // lastHeartbeat is intentionally NULL on first seed so the heartbeat
-      // scheduler doesn't churn them — it only demotes arms that have
-      // heartbeated at least once.
-      assert.equal(
-        r.lastHeartbeat,
-        null,
-        `${r.id} should seed without lastHeartbeat`,
-      );
+      if (r.heartbeatUrl) {
+        assert.ok(
+          r.lastHeartbeat instanceof Date,
+          `${r.id} has heartbeatUrl=${r.heartbeatUrl} so lastHeartbeat should be bootstrapped to now()`,
+        );
+      } else {
+        // kannaktopus arms (kannaka-prime, swarm-worker) have no
+        // heartbeatUrl — their availability is tracked via the NATS bridge
+        // (follow-up #20), not the HTTP probe.
+        assert.equal(
+          r.lastHeartbeat,
+          null,
+          `${r.id} has no heartbeatUrl so lastHeartbeat should stay NULL`,
+        );
+      }
     }
   });
 });

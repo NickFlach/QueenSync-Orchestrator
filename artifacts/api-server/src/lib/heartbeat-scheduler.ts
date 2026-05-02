@@ -1,4 +1,4 @@
-import { and, lt, ne, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, lt, ne, inArray, isNotNull } from "drizzle-orm";
 import { db, armsTable } from "@workspace/db";
 import { logger } from "./logger";
 import { broadcast } from "./ws";
@@ -9,6 +9,13 @@ import { recordLog } from "./log";
  * passing `intervalMs` to {@link startHeartbeatScheduler}.
  */
 export const DEFAULT_HEARTBEAT_INTERVAL_MS = 60_000;
+
+/**
+ * Default per-probe HTTP timeout (5s). Probes use AbortSignal.timeout.
+ */
+export const DEFAULT_HEARTBEAT_PROBE_TIMEOUT_MS = 5_000;
+
+type Fetcher = typeof fetch;
 
 /**
  * Default stale window (3 minutes). Arms whose lastHeartbeat is older than
@@ -29,6 +36,78 @@ let timer: NodeJS.Timeout | null = null;
 export interface HeartbeatSchedulerOptions {
   intervalMs?: number;
   staleMs?: number;
+  probeTimeoutMs?: number;
+  fetcher?: Fetcher;
+}
+
+/**
+ * Actively probe each arm whose `heartbeatUrl` is set. On a 2xx response
+ * we refresh `lastHeartbeat = now()` (and restore status from `offline`
+ * back to `idle`). On a non-2xx or thrown error we leave `lastHeartbeat`
+ * alone — the staleness sweep handles eventual demotion. Returns the IDs
+ * we successfully probed.
+ *
+ * NATS-only arms (kannaktopus arms with no heartbeatUrl) are skipped; their
+ * availability is tracked by the NATS bridge via presence join/leave events
+ * (handled separately, see follow-up #20).
+ */
+export async function probeHeartbeatUrls(
+  opts: HeartbeatSchedulerOptions = {},
+): Promise<string[]> {
+  const fetcher = opts.fetcher ?? fetch;
+  const timeoutMs = opts.probeTimeoutMs ?? DEFAULT_HEARTBEAT_PROBE_TIMEOUT_MS;
+  const rows = await db
+    .select({
+      id: armsTable.id,
+      heartbeatUrl: armsTable.heartbeatUrl,
+      status: armsTable.status,
+    })
+    .from(armsTable)
+    .where(isNotNull(armsTable.heartbeatUrl));
+  const refreshed: string[] = [];
+  await Promise.all(
+    rows.map(async (row) => {
+      const url = row.heartbeatUrl;
+      if (!url) return;
+      try {
+        const r = await fetcher(url, {
+          method: "GET",
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (!r.ok) {
+          logger.debug(
+            { armId: row.id, status: r.status, url },
+            "heartbeat probe non-2xx — letting sweep handle staleness",
+          );
+          return;
+        }
+        const next: { status?: string; lastHeartbeat: Date } = {
+          lastHeartbeat: new Date(),
+        };
+        if (row.status === "offline") next.status = "idle";
+        await db.update(armsTable).set(next).where(eq(armsTable.id, row.id));
+        refreshed.push(row.id);
+        if (row.status === "offline") {
+          broadcast({
+            type: "arms_updated",
+            data: { armId: row.id, status: "idle" },
+          });
+        }
+      } catch (err) {
+        logger.debug(
+          { armId: row.id, url, err: (err as Error).message },
+          "heartbeat probe error — letting sweep handle staleness",
+        );
+      }
+    }),
+  );
+  if (refreshed.length > 0) {
+    logger.debug(
+      { count: refreshed.length, ids: refreshed },
+      "heartbeat probe — refreshed lastHeartbeat",
+    );
+  }
+  return refreshed;
 }
 
 function getStaleMs(opts: HeartbeatSchedulerOptions = {}): number {
@@ -43,8 +122,9 @@ function getStaleMs(opts: HeartbeatSchedulerOptions = {}): number {
 
 /**
  * Run a single sweep — demote arms whose lastHeartbeat is stale to
- * `offline`. Skips arms with NULL lastHeartbeat (never pinged) so seeded
- * rows don't churn. Returns the IDs that were actually demoted.
+ * `offline`. Skips arms with NULL lastHeartbeat — those are tracked via
+ * a separate channel (NATS presence) rather than HTTP probing. Returns
+ * the IDs that were actually demoted.
  */
 export async function sweepStaleHeartbeats(
   opts: HeartbeatSchedulerOptions = {},
@@ -123,11 +203,24 @@ export function startHeartbeatScheduler(
     return stopHeartbeatScheduler;
   }
   const intervalMs = opts.intervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
+  const tick = async () => {
+    try {
+      await probeHeartbeatUrls(opts);
+    } catch (err) {
+      logger.warn({ err }, "heartbeat probe failed");
+    }
+    try {
+      await sweepStaleHeartbeats(opts);
+    } catch (err) {
+      logger.warn({ err }, "heartbeat sweep failed");
+    }
+  };
   timer = setInterval(() => {
-    void sweepStaleHeartbeats(opts).catch((err) =>
-      logger.warn({ err }, "heartbeat sweep failed"),
-    );
+    void tick();
   }, intervalMs);
+  // Kick off an immediate first probe so newly-booted servers don't wait
+  // a full interval before reflecting reality.
+  void tick();
   // Don't keep the event loop alive for tests / graceful shutdown.
   if (typeof timer.unref === "function") timer.unref();
   logger.info(
