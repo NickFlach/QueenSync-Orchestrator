@@ -10,7 +10,10 @@ name = "API Server"
 paths = ["/api", "/ws"]
 
 [services.development]
-run = "pnpm --filter @workspace/api-server run dev"
+# Dev orchestrator boots a real nats-server + a fake kannaka-memory HRM
+# alongside the api-server so Wave 4 (Memory Gate ↔ HRM bridge) can be
+# exercised end-to-end. See scripts/dev-with-nats.sh and task-27.
+run = "bash ../../scripts/dev-with-nats.sh"
 
 [services.production]
 

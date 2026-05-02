@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "dev-fake-hrm": "tsx ./src/dev-fake-hrm.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "nats": "^2.29.3"
   },
   "devDependencies": {
     "@types/node": "catalog:",

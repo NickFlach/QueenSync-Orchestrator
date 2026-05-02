@@ -685,6 +685,10 @@ importers:
         version: 25.3.5
 
   scripts:
+    dependencies:
+      nats:
+        specifier: ^2.29.3
+        version: 2.29.3
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
