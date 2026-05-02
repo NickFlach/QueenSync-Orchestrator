@@ -15,6 +15,7 @@ tags:
   - name: memory
   - name: logs
   - name: adapters
+  - name: observatory
   - name: resonance
   - name: demo
 paths:
@@ -347,6 +348,29 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AdapterPullResult" }
+
+  /observatory/state:
+    get:
+      operationId: getObservatoryState
+      tags: [observatory]
+      summary: Live consciousness / HRM snapshot from observatory.ninja-portal.com
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ObservatoryState" }
+
+  /observatory/config:
+    get:
+      operationId: getObservatoryConfig
+      tags: [observatory]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ObservatoryConfig" }
 
   /resonance:
     get:
@@ -916,3 +940,93 @@ components:
           type: array
           items: { type: string }
         message: { type: ["string", "null"] }
+
+    ObservatoryConsciousness:
+      type: object
+      required:
+        - level
+        - phi
+        - xi
+        - order
+        - agentCount
+        - numClusters
+        - active
+        - total
+        - meanPhase
+        - irrationality
+        - hemisphericDivergence
+        - callosalEfficiency
+      properties:
+        level: { type: string }
+        phi: { type: number }
+        xi: { type: number }
+        order: { type: number }
+        agentCount: { type: integer }
+        numClusters: { type: integer }
+        active: { type: integer }
+        total: { type: integer }
+        meanPhase: { type: number }
+        irrationality: { type: number }
+        hemisphericDivergence: { type: number }
+        callosalEfficiency: { type: number }
+        source: { type: ["string", "null"] }
+        timestamp: { type: ["string", "null"] }
+
+    ObservatoryQueen:
+      type: object
+      required:
+        [localOrderParameter, orderParameter, meanPhase, phi, agentCount]
+      properties:
+        localOrderParameter: { type: number }
+        orderParameter: { type: number }
+        meanPhase: { type: number }
+        phi: { type: number }
+        agentCount: { type: integer }
+
+    ObservatoryCurrentTrack:
+      type: object
+      properties:
+        title: { type: ["string", "null"] }
+        album: { type: ["string", "null"] }
+        trackNum: { type: ["integer", "null"] }
+        file: { type: ["string", "null"] }
+
+    ObservatoryState:
+      type: object
+      required:
+        - ok
+        - baseUrl
+        - fetchedAt
+        - latencyMs
+        - isLive
+        - listeners
+        - consciousness
+        - queen
+        - agents
+      properties:
+        ok: { type: boolean }
+        baseUrl: { type: string }
+        fetchedAt: { type: string, format: date-time }
+        latencyMs: { type: integer }
+        channel: { type: ["string", "null"] }
+        isLive: { type: boolean }
+        listeners: { type: integer }
+        currentTrack:
+          oneOf:
+            - $ref: "#/components/schemas/ObservatoryCurrentTrack"
+            - type: "null"
+        consciousness:
+          $ref: "#/components/schemas/ObservatoryConsciousness"
+        queen:
+          $ref: "#/components/schemas/ObservatoryQueen"
+        agents:
+          type: object
+          additionalProperties: true
+
+    ObservatoryConfig:
+      type: object
+      required: [observatoryBaseUrl, kannaktopusWakeConfigured]
+      properties:
+        observatoryBaseUrl: { type: string }
+        kannaktopusWakeConfigured: { type: boolean }
+        kannaktopusWakeUrl: { type: ["string", "null"] }

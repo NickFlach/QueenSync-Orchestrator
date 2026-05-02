@@ -8,6 +8,7 @@ import signalsRouter from "./signals";
 import memoryRouter from "./memory";
 import logsRouter from "./logs";
 import adaptersRouter from "./adapters";
+import observatoryRouter from "./observatory";
 import resonanceRouter from "./resonance";
 import demoRouter from "./demo";
 import { requireViewer } from "../lib/auth";
@@ -28,6 +29,7 @@ router.use(requireViewer, signalsRouter);
 router.use(requireViewer, memoryRouter);
 router.use(requireViewer, logsRouter);
 router.use(requireViewer, adaptersRouter);
+router.use(requireViewer, observatoryRouter);
 router.use(requireViewer, resonanceRouter);
 router.use(requireViewer, demoRouter);
 

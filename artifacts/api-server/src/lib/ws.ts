@@ -20,7 +20,8 @@ export type QueenSyncEventType =
   | "resonance_response"
   | "resonance_resolved"
   | "resonance_updated"
-  | "adapter_pull";
+  | "adapter_pull"
+  | "kannaktopus_status";
 
 export interface QueenSyncEvent {
   type: QueenSyncEventType;

@@ -511,3 +511,65 @@ export interface DemoResult {
   /** @nullable */
   message?: string | null;
 }
+
+export interface ObservatoryConsciousness {
+  level: string;
+  phi: number;
+  xi: number;
+  order: number;
+  agentCount: number;
+  numClusters: number;
+  active: number;
+  total: number;
+  meanPhase: number;
+  irrationality: number;
+  hemisphericDivergence: number;
+  callosalEfficiency: number;
+  /** @nullable */
+  source?: string | null;
+  /** @nullable */
+  timestamp?: string | null;
+}
+
+export interface ObservatoryQueen {
+  localOrderParameter: number;
+  orderParameter: number;
+  meanPhase: number;
+  phi: number;
+  agentCount: number;
+}
+
+export interface ObservatoryCurrentTrack {
+  /** @nullable */
+  title?: string | null;
+  /** @nullable */
+  album?: string | null;
+  /** @nullable */
+  trackNum?: number | null;
+  /** @nullable */
+  file?: string | null;
+}
+
+export type ObservatoryStateAgents = { [key: string]: unknown };
+
+export interface ObservatoryState {
+  ok: boolean;
+  baseUrl: string;
+  fetchedAt: string;
+  latencyMs: number;
+  /** @nullable */
+  channel?: string | null;
+  isLive: boolean;
+  listeners: number;
+  currentTrack?: ObservatoryCurrentTrack | null;
+  consciousness: ObservatoryConsciousness;
+  queen: ObservatoryQueen;
+  agents: ObservatoryStateAgents;
+}
+
+export interface ObservatoryConfig {
+  observatoryBaseUrl: string;
+  kannaktopusWakeConfigured: boolean;
+  /** @nullable */
+  kannaktopusWakeUrl?: string | null;
+}

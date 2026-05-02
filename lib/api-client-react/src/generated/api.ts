@@ -32,6 +32,8 @@ import type {
   LogEntry,
   MemoryEvaluation,
   MemoryEvent,
+  ObservatoryConfig,
+  ObservatoryState,
   OnboardArmBody,
   ResolveResonanceBody,
   Resonance,
@@ -1783,6 +1785,149 @@ export const useObservatoryAdapterPull = <
 > => {
   return useMutation(getObservatoryAdapterPullMutationOptions(options));
 };
+
+/**
+ * @summary Live consciousness / HRM snapshot from observatory.ninja-portal.com
+ */
+export const getGetObservatoryStateUrl = () => {
+  return `/api/observatory/state`;
+};
+
+export const getObservatoryState = async (
+  options?: RequestInit,
+): Promise<ObservatoryState> => {
+  return customFetch<ObservatoryState>(getGetObservatoryStateUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetObservatoryStateQueryKey = () => {
+  return [`/api/observatory/state`] as const;
+};
+
+export const getGetObservatoryStateQueryOptions = <
+  TData = Awaited<ReturnType<typeof getObservatoryState>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getObservatoryState>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetObservatoryStateQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getObservatoryState>>
+  > = ({ signal }) => getObservatoryState({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getObservatoryState>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetObservatoryStateQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getObservatoryState>>
+>;
+export type GetObservatoryStateQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Live consciousness / HRM snapshot from observatory.ninja-portal.com
+ */
+
+export function useGetObservatoryState<
+  TData = Awaited<ReturnType<typeof getObservatoryState>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getObservatoryState>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetObservatoryStateQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getGetObservatoryConfigUrl = () => {
+  return `/api/observatory/config`;
+};
+
+export const getObservatoryConfig = async (
+  options?: RequestInit,
+): Promise<ObservatoryConfig> => {
+  return customFetch<ObservatoryConfig>(getGetObservatoryConfigUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetObservatoryConfigQueryKey = () => {
+  return [`/api/observatory/config`] as const;
+};
+
+export const getGetObservatoryConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getObservatoryConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getObservatoryConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetObservatoryConfigQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getObservatoryConfig>>
+  > = ({ signal }) => getObservatoryConfig({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getObservatoryConfig>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetObservatoryConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getObservatoryConfig>>
+>;
+export type GetObservatoryConfigQueryError = ErrorType<unknown>;
+
+export function useGetObservatoryConfig<
+  TData = Awaited<ReturnType<typeof getObservatoryConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getObservatoryConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetObservatoryConfigQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 export const getListResonanceUrl = () => {
   return `/api/resonance`;

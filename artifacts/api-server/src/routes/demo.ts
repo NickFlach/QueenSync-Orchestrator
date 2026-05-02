@@ -14,6 +14,10 @@ import { dispatchTask } from "../lib/router";
 import { autoLocalResonance, resolveField } from "../lib/resonance";
 import { evaluateMemory } from "../lib/memory-gate";
 import { requireOperator } from "../lib/auth";
+import {
+  fetchObservatoryState,
+  pokeKannaktopusWake,
+} from "../lib/observatory-bridge";
 
 const router: IRouter = Router();
 
@@ -55,13 +59,44 @@ router.post("/demo/wake-kannaktopus", requireOperator, async (_req, res): Promis
     broadcast({ type: "task_created", data: task });
     await dispatchTask(task);
   }
+  // Best-effort Kannaktopus wake poke — only fires if KANNAKTOPUS_WAKE_URL
+  // is configured. Result is informational; the demo always succeeds.
+  const wake = await pokeKannaktopusWake({
+    taskIds: created,
+    source: "demo:wake-kannaktopus",
+  });
+
+  // Pull a live observatory snapshot so the operator can see Kannaktopus
+  // surface in the HRM panel and the Hologram TV view.
+  const observatory = await fetchObservatoryState();
+  broadcast({
+    type: "kannaktopus_status",
+    data: {
+      trigger: "demo:wake-kannaktopus",
+      observatory,
+      wake,
+    },
+  });
+
   await recordLog({
     eventType: "kannaktopus_wake",
     source: "demo",
-    summary: "Kannaktopus woken — issued 3 demo tasks",
-    metadata: { taskIds: created },
+    summary: wake.attempted
+      ? `Kannaktopus woken — issued ${created.length} demo tasks · ${wake.message}`
+      : `Kannaktopus woken — issued ${created.length} demo tasks`,
+    metadata: {
+      taskIds: created,
+      kannaktopusWake: wake,
+      observatoryLevel: observatory.consciousness.level,
+      observatoryPhi: observatory.consciousness.phi,
+    },
   });
-  res.json({ created, message: "Kannaktopus arms reaching outward." });
+  res.json({
+    created,
+    message: wake.attempted
+      ? `Kannaktopus arms reaching outward · ${wake.message}`
+      : "Kannaktopus arms reaching outward — observatory pulse pulled.",
+  });
 });
 
 router.post("/demo/dream-lite", requireOperator, async (_req, res): Promise<void> => {

@@ -18,6 +18,7 @@ import SignalsIngestion from "@/pages/signals";
 import MemoryGate from "@/pages/memory";
 import ResonanceFields from "@/pages/resonance";
 import Adapters from "@/pages/adapters";
+import Hologram from "@/pages/hologram";
 import ExecutionLog from "@/pages/logs";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { LoginScreen } from "@/components/login-screen";
@@ -68,6 +69,7 @@ function Router() {
         <Route path="/memory" component={MemoryGate} />
         <Route path="/resonance" component={ResonanceFields} />
         <Route path="/adapters" component={Adapters} />
+        <Route path="/hologram" component={Hologram} />
         <Route path="/logs" component={ExecutionLog} />
         <Route component={NotFound} />
       </Switch>

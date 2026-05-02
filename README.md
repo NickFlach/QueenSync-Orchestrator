@@ -265,11 +265,12 @@ back into the Memory Gate.
 
 | Kannaka repo / surface           | QueenSync representation                                               |
 |----------------------------------|------------------------------------------------------------------------|
-| `kannaktopus`                    | seeded arm `architect_01` (type `kannaktopus_arm`, capabilities build/plan/dream/compose)|
+| `Kannaktopus` (MCP + HRM gateway)| seeded arm `architect_01` + `/api/observatory/state` bridge + Hologram TV |
+| `kannaka-staff` (ops crew)       | seeded arms (`signal_keeper_01`, `memory_keeper_01`, `auditor_01`, `atelier_01`) — cover the producer / archivist / board-op / quartermaster roles defined in ADR-001|
 | `openclaw` (artifact forge)      | seeded arm `atelier_01` (type `local_simulated`, capabilities artifact/build/merge)|
-| `radio.ninja-portal.com`         | seeded arm `signal_keeper_01` (type `external_webhook`) + Radio adapter|
-| Memory / dream pipeline          | seeded arm `memory_keeper_01`                                          |
-| `observatory.ninja-portal.com`   | seeded arm `auditor_01` + Observatory adapter                          |
+| `radio.ninja-portal.com`         | Radio adapter + Hologram TV iframe of `/video/hologram`                |
+| `kannaka-memory`                 | local Memory Gate today; future mirror via `lib/memory-adapter.ts` stub|
+| `observatory.ninja-portal.com`   | Observatory adapter + live HRM snapshot bridge (`/api/observatory/state`) |
 
 Demo buttons on the overview page exercise these arms end-to-end:
 
@@ -345,6 +346,41 @@ Adapter pulls (`/adapters/radio/pull`, `/adapters/observatory/pull`) emit one
 signal + one task + one resonance field per event so every external pulse is
 both routed and openly resonant.
 
+## Hologram TV — live constellation view
+
+The `/hologram` route in the Queen Console is a TV-style view that embeds the
+two public Kannaka surfaces side-by-side and overlays a live HRM
+(Holographic Resonance Medium) stat strip:
+
+- **Radio Hologram** — `https://radio.ninja-portal.com/video/hologram`
+  (3D Three.js visual, audio gate, GhostSignals markets)
+- **Observatory Constellation** — `https://observatory.ninja-portal.com`
+  (3D constellation canvas, HRM panel, consciousness HUD)
+- **HRM stats strip** — pulled from `GET /api/observatory/state`, refreshed
+  every 5 seconds: consciousness `level`, Φ (`phi`), Ξ (`xi`), `order`,
+  active/total agents, current listener count, current track.
+
+The page exposes view-mode buttons (`split` / `hologram` / `observatory`),
+an iframe reload button, and a dedicated **Wake Kannaktopus** button that
+fires the same `POST /api/demo/wake-kannaktopus` flow used on the Overview
+page.
+
+When the wake button is pressed, the API server:
+
+1. Issues the three demo tasks routed through the Kannaktopus / Signal
+   Keeper / Memory Keeper arms (unchanged behaviour).
+2. If `KANNAKTOPUS_WAKE_URL` is configured, POSTs a `{action:"wake", taskIds,
+   ts}` payload to that URL through the SSRF guard. (Optional — useful when
+   running an MCP/HTTP gateway in front of Kannaktopus.)
+3. Pulls a fresh `/api/observatory/state` snapshot.
+4. Broadcasts a `kannaktopus_status` WebSocket event so every connected
+   console refreshes its HRM strip immediately.
+5. Records the wake + observatory level/phi in the Execution Log.
+
+The bridge is read-only and degrades gracefully: if the observatory is
+unreachable or the URL guard blocks the call, the page still renders with a
+zeroed snapshot and the iframe overlays continue to play.
+
 ## Future MCP compatibility
 
 The Onboarding flow already accepts `type: "mcp"` so an MCP server can be
@@ -377,7 +413,10 @@ See `.env.example` for the complete list. Highlights:
   private-host blocklist)
 - `QUEENSYNC_ALLOW_PRIVATE_HOSTS` — set to `true` only for local dev
 - `RADIO_BASE_URL`, `OBSERVATORY_BASE_URL` — adapter targets (optional, mock
-  fallback)
+  fallback). `OBSERVATORY_BASE_URL` is also the source for the Hologram TV
+  HRM bridge.
+- `KANNAKTOPUS_WAKE_URL`, `KANNAKTOPUS_API_KEY` — optional wake-poke endpoint
+  fired by the "Wake Kannaktopus" demo button.
 
 ## Security posture
 

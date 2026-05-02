@@ -464,6 +464,60 @@ export const ObservatoryAdapterPullResponse = zod.object({
   resonanceIds: zod.array(zod.string()).optional(),
 });
 
+/**
+ * @summary Live consciousness / HRM snapshot from observatory.ninja-portal.com
+ */
+export const GetObservatoryStateResponse = zod.object({
+  ok: zod.boolean(),
+  baseUrl: zod.string(),
+  fetchedAt: zod.coerce.date(),
+  latencyMs: zod.number(),
+  channel: zod.string().nullish(),
+  isLive: zod.boolean(),
+  listeners: zod.number(),
+  currentTrack: zod
+    .union([
+      zod.object({
+        title: zod.string().nullish(),
+        album: zod.string().nullish(),
+        trackNum: zod.number().nullish(),
+        file: zod.string().nullish(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  consciousness: zod.object({
+    level: zod.string(),
+    phi: zod.number(),
+    xi: zod.number(),
+    order: zod.number(),
+    agentCount: zod.number(),
+    numClusters: zod.number(),
+    active: zod.number(),
+    total: zod.number(),
+    meanPhase: zod.number(),
+    irrationality: zod.number(),
+    hemisphericDivergence: zod.number(),
+    callosalEfficiency: zod.number(),
+    source: zod.string().nullish(),
+    timestamp: zod.string().nullish(),
+  }),
+  queen: zod.object({
+    localOrderParameter: zod.number(),
+    orderParameter: zod.number(),
+    meanPhase: zod.number(),
+    phi: zod.number(),
+    agentCount: zod.number(),
+  }),
+  agents: zod.record(zod.string(), zod.unknown()),
+});
+
+export const GetObservatoryConfigResponse = zod.object({
+  observatoryBaseUrl: zod.string(),
+  kannaktopusWakeConfigured: zod.boolean(),
+  kannaktopusWakeUrl: zod.string().nullish(),
+});
+
 export const ListResonanceResponseItem = zod.object({
   id: zod.string(),
   intent: zod.string(),

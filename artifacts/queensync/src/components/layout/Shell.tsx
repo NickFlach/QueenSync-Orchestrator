@@ -12,6 +12,7 @@ import {
   LogOut,
   Shield,
   Eye,
+  Tv,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -34,6 +35,7 @@ const NAV_ITEMS = [
   { href: "/memory", label: "Memory", icon: BrainCircuit },
   { href: "/resonance", label: "Resonance", icon: AudioWaveform },
   { href: "/adapters", label: "Adapters", icon: Activity },
+  { href: "/hologram", label: "Hologram TV", icon: Tv },
   { href: "/logs", label: "Logs", icon: Terminal },
 ];
 

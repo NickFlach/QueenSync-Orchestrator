@@ -9,6 +9,8 @@ import {
   getListResonanceQueryKey,
   getListActiveResonanceQueryKey,
   getGetSystemSummaryQueryKey,
+  getGetObservatoryStateQueryKey,
+  getGetObservatoryConfigQueryKey,
 } from "@workspace/api-client-react";
 
 export type WsStatus = "idle" | "connecting" | "open" | "closed";
@@ -48,6 +50,12 @@ const EVENT_TO_KEYS: Record<string, (() => readonly unknown[])[]> = {
     getListResonanceQueryKey,
     getListActiveResonanceQueryKey,
     getGetSystemSummaryQueryKey,
+  ],
+  kannaktopus_status: [
+    getGetObservatoryStateQueryKey,
+    getGetObservatoryConfigQueryKey,
+    getGetSystemSummaryQueryKey,
+    getListLogsQueryKey,
   ],
 };
 
