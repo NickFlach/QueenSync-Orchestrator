@@ -271,14 +271,19 @@ A "Restart Radio" button on the radio arm dispatches a task to the
   never heartbeated (lastHeartbeat IS NULL) are intentionally left alone
   so seeded `offline` rows don't churn.
 - **Queen Console — quick actions.** `artifacts/queensync/src/pages/arms.tsx`
-  ArmDetailDialog now renders a "Quick Actions" panel with one button
-  per matching capability (Restart Radio, Restart Observatory, Trigger
-  Oration, Trigger Dream Cycle, Kannaka Status). Each button calls
-  `useCreateTask` with the corresponding capability — the picker routes
-  the task to the only arm advertising it (`oracle-admin`). The dialog
-  then polls `useGetTask` every 2s and surfaces the live `[active]` →
-  `[completed]`/`[failed]` status plus the result/error payload returned
-  by the shim's callback.
+  ArmDetailDialog now renders a "Quick Actions" panel. Each entry has a
+  capability AND a `targetArmIds` list; the button shows on either the
+  executor (the arm advertising the capability — `oracle-admin`) OR on
+  the target arm whose service the action operates on. So the radio arm
+  detail shows "Restart Radio" + "Trigger Oration"; observatory shows
+  "Restart Observatory"; kannaka-prime shows "Trigger Dream Cycle" +
+  "Kannaka Status"; swarm-worker shows "Kannaka Status"; oracle-admin
+  shows all five. Every button calls `useCreateTask` with the capability
+  string — the picker routes the task to the only arm advertising it
+  (`oracle-admin`), which dispatches over HMAC-signed external webhook.
+  The dialog polls `useGetTask` every 2s and surfaces the live
+  `[active]` → `[completed]`/`[failed]` status plus the result/error
+  payload returned by the shim's callback.
 - **Tests.** `artifacts/oracle-admin/src/__tests__/` covers HMAC
   good/bad/expired/missing/tampered signatures and dispatch routing for
   oration / unknown-capability / setOverride-validation /

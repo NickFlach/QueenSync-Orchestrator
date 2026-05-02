@@ -57,11 +57,12 @@ const ARM_TYPES: OnboardArmBodyType[] = [
 ];
 
 /**
- * Wave 3 — capability quick-actions. Each entry is a button rendered in the
- * arm-detail dialog when the arm advertises that capability. The capability
- * is sent verbatim to `POST /api/tasks`, which routes via the picker
- * (`oracle-admin` is currently the only arm with these capabilities, so the
- * dispatch goes there over HMAC-signed external webhook).
+ * Wave 3 — capability quick-actions. The button appears on an arm's detail
+ * dialog when EITHER the arm advertises the capability (the executor — i.e.
+ * `oracle-admin`) OR the arm's id is in `targetArmIds` (the operational
+ * target — e.g. `Restart Radio` shows up on the radio arm even though
+ * radio doesn't advertise `restart_radio`; the dispatch is still routed by
+ * the picker to the only arm that does, which is `oracle-admin`).
  */
 interface QuickAction {
   capability: string;
@@ -69,6 +70,7 @@ interface QuickAction {
   intent: string;
   context?: Record<string, unknown>;
   testId: string;
+  targetArmIds: readonly string[];
 }
 const QUICK_ACTIONS: QuickAction[] = [
   {
@@ -76,30 +78,35 @@ const QUICK_ACTIONS: QuickAction[] = [
     label: "Restart Radio",
     intent: "Operator-triggered radio.service restart",
     testId: "button-restart-radio",
+    targetArmIds: ["radio"],
   },
   {
     capability: "restart_observatory",
     label: "Restart Observatory",
     intent: "Operator-triggered observatory.service restart",
     testId: "button-restart-observatory",
+    targetArmIds: ["observatory"],
   },
   {
     capability: "trigger_oration_now",
     label: "Trigger Oration",
     intent: "Operator-triggered oration",
     testId: "button-trigger-oration",
+    targetArmIds: ["radio"],
   },
   {
     capability: "dream_trigger",
     label: "Trigger Dream Cycle",
     intent: "Operator-triggered dream cycle",
     testId: "button-trigger-dream",
+    targetArmIds: ["kannaka-prime"],
   },
   {
     capability: "kannaka_status",
     label: "Kannaka Status",
     intent: "Fetch kannaka status snapshot",
     testId: "button-kannaka-status",
+    targetArmIds: ["kannaka-prime", "swarm-worker"],
   },
 ];
 
@@ -469,7 +476,11 @@ function ArmDetailDialog({
   });
 
   const availableActions = data
-    ? QUICK_ACTIONS.filter((a) => data.capabilities.includes(a.capability))
+    ? QUICK_ACTIONS.filter(
+        (a) =>
+          data.capabilities.includes(a.capability) ||
+          a.targetArmIds.includes(data.id),
+      )
     : [];
 
   return (
