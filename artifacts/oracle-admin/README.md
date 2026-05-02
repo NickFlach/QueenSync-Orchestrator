@@ -82,7 +82,12 @@ sudo journalctl -fu queensync-oracle-admin.service
 
 ### TLS is mandatory for public exposure
 
-The shim itself binds plain HTTP on `127.0.0.1:$PORT` (default 8090). HMAC
+The shim itself binds plain HTTP on `127.0.0.1:$PORT` (default 8090). This
+is the default in code: `server.listen(PORT, ORACLE_ADMIN_HOST)` where
+`ORACLE_ADMIN_HOST` defaults to `127.0.0.1`. Override it to `0.0.0.0` only
+when the shim is on a trusted private network (Tailscale, WireGuard,
+in-VPC) with the public firewall closed to its port — the shim logs a loud
+warning at startup whenever the bind host is non-loopback. HMAC
 body signing protects integrity and authenticity, but **HMAC over plain
 HTTP is replayable by anyone who can observe traffic within the ±5 minute
 timestamp window** — a passive on-path attacker can capture a valid

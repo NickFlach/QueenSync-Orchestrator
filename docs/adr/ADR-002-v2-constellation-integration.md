@@ -301,8 +301,10 @@ matching env on the Oracle host) before exposing the shim publicly.
 and authenticity, but plain HTTP allows passive on-path replay within
 the ±5min timestamp window. The seeded `QUEENSYNC_ORACLE_ADMIN_URL`
 defaults to `https://oracle-admin.ninja-portal.com/dispatch`; the
-shim is expected to bind `127.0.0.1:8090` and be exposed only via a
-TLS-terminating reverse proxy (nginx/caddy/Traefik) or a private
+shim itself binds `127.0.0.1:8090` by default
+(`ORACLE_ADMIN_HOST=127.0.0.1`) and logs a loud warning at startup if
+overridden to a non-loopback host. It is expected to be exposed only
+via a TLS-terminating reverse proxy (nginx/caddy/Traefik) or a private
 tunnel (Tailscale/WireGuard). The README runbook covers both.
 
 ### Wave 4 — Memory Gate ↔ HRM bridge

@@ -7,6 +7,12 @@ import { runDispatch, type DispatchPayload } from "./dispatch";
 const logger = pino({ level: process.env["LOG_LEVEL"] ?? "info" });
 
 const PORT = Number(process.env["PORT"] ?? 8090);
+// Bind loopback by default — HMAC body signing is integrity-only and
+// replayable inside the ±5min timestamp window over plain HTTP. Operators
+// must front the shim with a TLS-terminating reverse proxy (nginx/caddy) or
+// expose it only over a private tunnel (Tailscale/WireGuard). To override
+// for a trusted private network, set ORACLE_ADMIN_HOST=0.0.0.0 explicitly.
+const HOST = process.env["ORACLE_ADMIN_HOST"] ?? "127.0.0.1";
 const SECRET = process.env["QUEENSYNC_ORACLE_ADMIN_HMAC_SECRET"] ?? "";
 const REQUIRE_SIG = process.env["ORACLE_ADMIN_ALLOW_UNSIGNED"] !== "true";
 
@@ -14,6 +20,16 @@ if (!SECRET && REQUIRE_SIG) {
   logger.warn(
     "QUEENSYNC_ORACLE_ADMIN_HMAC_SECRET is unset and ORACLE_ADMIN_ALLOW_UNSIGNED!=true. " +
       "All /dispatch requests will be rejected with 503 until you configure the secret.",
+  );
+}
+
+if (HOST !== "127.0.0.1" && HOST !== "localhost" && HOST !== "::1") {
+  logger.warn(
+    { host: HOST },
+    "ORACLE_ADMIN_HOST is non-loopback — shim is reachable from the network. " +
+      "HMAC body signing alone does NOT prevent replay over plain HTTP. " +
+      "Ensure traffic to this port is restricted to a trusted private network " +
+      "or a TLS-terminating proxy.",
   );
 }
 
@@ -87,6 +103,9 @@ app.post("/dispatch", async (req: Request, res: Response) => {
 });
 
 const server = http.createServer(app);
-server.listen(PORT, () => {
-  logger.info({ port: PORT, signed: Boolean(SECRET) }, "oracle-admin shim listening");
+server.listen(PORT, HOST, () => {
+  logger.info(
+    { host: HOST, port: PORT, signed: Boolean(SECRET) },
+    "oracle-admin shim listening",
+  );
 });
