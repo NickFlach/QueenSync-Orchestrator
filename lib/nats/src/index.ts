@@ -263,6 +263,24 @@ export function createNatsClient(opts: NatsClientOptions): NatsClient {
   const subs: PendingSubscription[] = [];
   const stateListeners = new Set<(s: NatsConnectionStatus) => void>();
   let connecting = false;
+  let stopped = false;
+  let connectAttempts = 0;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  const baseRetryMs = opts.reconnectTimeWaitMs ?? 2000;
+  const maxRetryMs = 30_000;
+
+  function scheduleReconnect(): void {
+    if (stopped || !url) return;
+    if (reconnectTimer || nc) return;
+    const exp = Math.min(maxRetryMs, baseRetryMs * 2 ** Math.min(connectAttempts, 5));
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      if (stopped || nc) return;
+      void connect();
+    }, exp);
+    // Don't keep the event loop alive solely for reconnect attempts.
+    if (typeof reconnectTimer.unref === "function") reconnectTimer.unref();
+  }
 
   function setState(next: NatsConnectionState, err?: string | null): void {
     if (state === next && (err ?? null) === lastError) return;
@@ -330,7 +348,7 @@ export function createNatsClient(opts: NatsClientOptions): NatsClient {
       setState("disabled");
       return;
     }
-    if (nc || connecting) return;
+    if (stopped || nc || connecting) return;
     connecting = true;
     setState("connecting");
     try {
@@ -339,11 +357,15 @@ export function createNatsClient(opts: NatsClientOptions): NatsClient {
         servers: url,
         name: opts.name ?? "queensync",
         reconnect: true,
-        reconnectTimeWait: opts.reconnectTimeWaitMs ?? 2000,
+        reconnectTimeWait: baseRetryMs,
         maxReconnectAttempts:
           opts.maxReconnectAttempts ?? -1, // infinite
+        // We implement our own initial-connect retry below; nats.js's
+        // waitOnFirstConnect would block this Promise indefinitely if the
+        // broker is down at boot.
         waitOnFirstConnect: false,
       });
+      connectAttempts = 0;
       lastConnectedAt = new Date().toISOString();
       setState("connected", null);
       // Re-bind any subscriptions registered before connect succeeded.
@@ -385,14 +407,25 @@ export function createNatsClient(opts: NatsClientOptions): NatsClient {
       });
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
+      connectAttempts++;
       setState("disconnected", lastError);
-      onWarn("connect_failed", { url, err: lastError });
+      onWarn("connect_failed", { url, err: lastError, attempt: connectAttempts });
+      // nats.js only auto-reconnects AFTER a first successful connect.
+      // For the initial-connect-failure case (broker down at boot), drive
+      // our own exponential-backoff retry loop so the bridge eventually
+      // recovers without requiring an api-server restart.
+      scheduleReconnect();
     } finally {
       connecting = false;
     }
   }
 
   async function disconnect(): Promise<void> {
+    stopped = true;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
     const c = nc;
     nc = null;
     if (!c) {
