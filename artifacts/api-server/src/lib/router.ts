@@ -116,7 +116,9 @@ async function failTask(task: Task, arm: Arm, reason: string) {
 
 function callbackUrlFor(taskId: string): string {
   const base =
-    process.env["QUEENSYNC_PUBLIC_BASE_URL"] ?? "http://localhost:8080";
+    process.env["QUEENSYNC_BASE_URL"] ??
+    process.env["QUEENSYNC_PUBLIC_BASE_URL"] ??
+    "http://localhost:8080";
   return `${base.replace(/\/$/, "")}/api/tasks/${taskId}/callback`;
 }
 

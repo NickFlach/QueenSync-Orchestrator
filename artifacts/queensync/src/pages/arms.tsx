@@ -40,14 +40,23 @@ import { Cpu, Trash2, Activity, Wifi, Plus, Eye } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
-const ARM_TYPES = [
+const ARM_TYPES: OnboardArmBodyType[] = [
   "kannaktopus_arm",
-  "external_webhook",
+  "human_configured",
+  "api",
   "local_simulated",
+  "replit_hosted",
   "openclaw",
+  "external_webhook",
+  "mcp",
 ];
 
-const AUTH_METHODS = ["none", "bearer", "hmac"];
+const AUTH_METHODS: OnboardArmBodyAuthMethod[] = [
+  "none",
+  "api_key",
+  "bearer",
+  "jwt",
+];
 
 export default function ArmsRegistry() {
   const { data: arms, isLoading } = useListArms({
