@@ -2,21 +2,27 @@ openapi: 3.1.0
 info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
-  version: 0.1.0
-  description: API specification
+  version: 0.2.0
+  description: QueenSync — Kannaka agent orchestration & resonance control plane
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+  - name: arms
+  - name: tasks
+  - name: signals
+  - name: memory
+  - name: logs
+  - name: adapters
+  - name: resonance
+  - name: demo
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +30,889 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /summary:
+    get:
+      operationId: getSystemSummary
+      tags: [health]
+      summary: Live system status snapshot
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemSummary"
+
+  /arms:
+    get:
+      operationId: listArms
+      tags: [arms]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Arm" }
+    post:
+      operationId: onboardArm
+      tags: [arms]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OnboardArmBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Arm" }
+
+  /arms/{id}:
+    get:
+      operationId: getArm
+      tags: [arms]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArmDetail" }
+    delete:
+      operationId: removeArm
+      tags: [arms]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Deleted }
+
+  /arms/{id}/heartbeat:
+    post:
+      operationId: armHeartbeat
+      tags: [arms]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Arm" }
+
+  /arms/{id}/test-connection:
+    post:
+      operationId: testArmConnection
+      tags: [arms]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionTestResult" }
+
+  /tasks:
+    get:
+      operationId: listTasks
+      tags: [tasks]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Task" }
+    post:
+      operationId: createTask
+      tags: [tasks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateTaskBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+
+  /tasks/{id}:
+    get:
+      operationId: getTask
+      tags: [tasks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+
+  /tasks/{id}/retry:
+    post:
+      operationId: retryTask
+      tags: [tasks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+
+  /tasks/{id}/callback:
+    post:
+      operationId: taskCallback
+      tags: [tasks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskCallbackBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+
+  /signals:
+    get:
+      operationId: listSignals
+      tags: [signals]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Signal" }
+    post:
+      operationId: injectSignal
+      tags: [signals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InjectSignalBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Signal" }
+
+  /memory:
+    get:
+      operationId: listMemory
+      tags: [memory]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MemoryEvent" }
+
+  /memory/evaluate:
+    post:
+      operationId: evaluateMemory
+      tags: [memory]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvaluateMemoryBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemoryEvaluation" }
+
+  /logs:
+    get:
+      operationId: listLogs
+      tags: [logs]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LogEntry" }
+
+  /adapters/radio/health:
+    get:
+      operationId: radioAdapterHealth
+      tags: [adapters]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdapterHealth" }
+
+  /adapters/radio/signals:
+    get:
+      operationId: radioAdapterSignals
+      tags: [adapters]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdapterEvent" }
+
+  /adapters/radio/pull:
+    post:
+      operationId: radioAdapterPull
+      tags: [adapters]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdapterPullResult" }
+
+  /adapters/observatory/health:
+    get:
+      operationId: observatoryAdapterHealth
+      tags: [adapters]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdapterHealth" }
+
+  /adapters/observatory/events:
+    get:
+      operationId: observatoryAdapterEvents
+      tags: [adapters]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdapterEvent" }
+
+  /adapters/observatory/pull:
+    post:
+      operationId: observatoryAdapterPull
+      tags: [adapters]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdapterPullResult" }
+
+  /resonance:
+    get:
+      operationId: listResonance
+      tags: [resonance]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Resonance" }
+    post:
+      operationId: createResonance
+      tags: [resonance]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateResonanceBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Resonance" }
+
+  /resonance/active:
+    get:
+      operationId: listActiveResonance
+      tags: [resonance]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Resonance" }
+
+  /resonance/{id}/respond:
+    post:
+      operationId: respondResonance
+      tags: [resonance]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RespondResonanceBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Resonance" }
+
+  /resonance/{id}/resolve:
+    post:
+      operationId: resolveResonance
+      tags: [resonance]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ResolveResonanceBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Resonance" }
+
+  /demo/wake-kannaktopus:
+    post:
+      operationId: wakeKannaktopus
+      tags: [demo]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DemoResult" }
+
+  /demo/dream-lite:
+    post:
+      operationId: dreamLiteCompression
+      tags: [demo]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DemoResult" }
+
+  /demo/resonance-storm:
+    post:
+      operationId: resonanceStorm
+      tags: [demo]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DemoResult" }
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
+      properties:
+        status: { type: string }
+
+    SystemSummary:
+      type: object
+      required:
+        [
+          activeArms,
+          totalArms,
+          queuedTasks,
+          completedTasks,
+          failedTasks,
+          memoryApprovals,
+          recentSignals,
+          activeResonance,
+          radioStatus,
+          observatoryStatus,
+        ]
+      properties:
+        activeArms: { type: integer }
+        totalArms: { type: integer }
+        queuedTasks: { type: integer }
+        completedTasks: { type: integer }
+        failedTasks: { type: integer }
+        memoryApprovals: { type: integer }
+        recentSignals: { type: integer }
+        activeResonance: { type: integer }
+        radioStatus: { type: string }
+        observatoryStatus: { type: string }
+
+    Arm:
+      type: object
+      required:
+        [
+          id,
+          name,
+          type,
+          status,
+          capabilities,
+          authMethod,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        type:
+          type: string
+          description: Agent type
+          enum:
+            - kannaktopus_arm
+            - human_configured
+            - api
+            - local_simulated
+            - replit_hosted
+            - openclaw
+            - external_webhook
+            - mcp
+        status:
+          type: string
+          enum: [idle, busy, failed, offline, pending]
+        capabilities:
+          type: array
+          items: { type: string }
+        endpointUrl: { type: ["string", "null"] }
+        heartbeatUrl: { type: ["string", "null"] }
+        authMethod:
+          type: string
+          enum: [none, api_key, bearer, jwt]
+        description: { type: ["string", "null"] }
+        resonanceTags:
+          type: array
+          items: { type: string }
+        resonanceSensitivity: { type: number }
+        resonanceMode:
+          type: string
+          enum: [auto, passive, off]
+        lastHeartbeat: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ArmDetail:
+      allOf:
+        - $ref: "#/components/schemas/Arm"
+        - type: object
+          required: [recentTasks, memoryContributionCount]
+          properties:
+            recentTasks:
+              type: array
+              items: { $ref: "#/components/schemas/Task" }
+            memoryContributionCount: { type: integer }
+
+    OnboardArmBody:
+      type: object
+      required: [name, type, capabilities, authMethod]
+      properties:
+        name: { type: string }
+        type:
+          type: string
+          enum:
+            - kannaktopus_arm
+            - human_configured
+            - api
+            - local_simulated
+            - replit_hosted
+            - openclaw
+            - external_webhook
+            - mcp
+        capabilities:
+          type: array
+          items: { type: string }
+        endpointUrl: { type: ["string", "null"] }
+        heartbeatUrl: { type: ["string", "null"] }
+        authMethod:
+          type: string
+          enum: [none, api_key, bearer, jwt]
+        description: { type: ["string", "null"] }
+        resonanceTags:
+          type: array
+          items: { type: string }
+        resonanceSensitivity: { type: ["number", "null"] }
+        resonanceMode:
+          type: ["string", "null"]
+          enum: [auto, passive, off, null]
+
+    ConnectionTestResult:
+      type: object
+      required: [ok, message]
+      properties:
+        ok: { type: boolean }
+        message: { type: string }
+        latencyMs: { type: ["integer", "null"] }
+
+    Task:
+      type: object
+      required:
+        [
+          id,
+          intent,
+          requiredCapability,
+          priority,
+          source,
+          status,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string }
+        intent: { type: string }
+        requiredCapability: { type: string }
+        priority: { type: integer }
+        source: { type: string }
+        context:
+          type: object
+          additionalProperties: true
+        status:
+          type: string
+          enum: [pending, active, completed, failed]
+        assignedArmId: { type: ["string", "null"] }
+        result: { type: ["string", "null"] }
+        error: { type: ["string", "null"] }
+        retryCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CreateTaskBody:
+      type: object
+      required: [intent, requiredCapability]
+      properties:
+        intent: { type: string }
+        requiredCapability: { type: string }
+        priority: { type: ["integer", "null"] }
+        source: { type: ["string", "null"] }
+        context:
+          type: object
+          additionalProperties: true
+
+    TaskCallbackBody:
+      type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
+          enum: [completed, failed]
+        result: { type: ["string", "null"] }
+        error: { type: ["string", "null"] }
 
+    Signal:
+      type: object
+      required: [id, type, payload, status, createdAt]
+      properties:
+        id: { type: string }
+        type:
+          type: string
+          enum:
+            - radio_transmission
+            - openclaw_artifact
+            - memory_anomaly
+            - build_request
+            - governance_alert
+            - observation_event
+            - other
+        source: { type: ["string", "null"] }
+        payload:
+          type: object
+          additionalProperties: true
+        status:
+          type: string
+          enum: [received, converted, ignored]
+        derivedTaskId: { type: ["string", "null"] }
+        derivedResonanceId: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+
+    InjectSignalBody:
+      type: object
+      required: [type, payload]
+      properties:
+        type:
+          type: string
+          enum:
+            - radio_transmission
+            - openclaw_artifact
+            - memory_anomaly
+            - build_request
+            - governance_alert
+            - observation_event
+            - other
+        source: { type: ["string", "null"] }
+        payload:
+          type: object
+          additionalProperties: true
+
+    MemoryEvent:
+      type: object
+      required: [id, type, tag, content, importance, decision, createdAt]
+      properties:
+        id: { type: string }
+        type:
+          type: string
+          enum:
+            - agent_output
+            - signal
+            - decision
+            - artifact
+            - system_event
+            - resonance_event
+        tag: { type: string }
+        content: { type: string }
+        importance: { type: number }
+        decision:
+          type: string
+          enum: [approved, rejected, duplicate]
+        agentId: { type: ["string", "null"] }
+        sourceTaskId: { type: ["string", "null"] }
+        sourceResonanceId: { type: ["string", "null"] }
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt: { type: string, format: date-time }
+
+    EvaluateMemoryBody:
+      type: object
+      required: [type, content]
+      properties:
+        type:
+          type: string
+          enum:
+            - agent_output
+            - signal
+            - decision
+            - artifact
+            - system_event
+            - resonance_event
+        content: { type: string }
+        agentId: { type: ["string", "null"] }
+        sourceTaskId: { type: ["string", "null"] }
+        sourceResonanceId: { type: ["string", "null"] }
+        metadata:
+          type: object
+          additionalProperties: true
+
+    MemoryEvaluation:
+      type: object
+      required: [decision, importance, event]
+      properties:
+        decision:
+          type: string
+          enum: [approved, rejected, duplicate]
+        importance: { type: number }
+        event:
+          oneOf:
+            - $ref: "#/components/schemas/MemoryEvent"
+            - type: "null"
+
+    LogEntry:
+      type: object
+      required: [id, eventType, summary, createdAt]
+      properties:
+        id: { type: string }
+        eventType:
+          type: string
+          enum:
+            - arm_registered
+            - arm_removed
+            - heartbeat
+            - signal_received
+            - task_created
+            - task_assigned
+            - task_completed
+            - task_failed
+            - memory_approved
+            - memory_rejected
+            - resonance_created
+            - resonance_response
+            - resonance_resolved
+            - adapter_pull
+            - dream_lite
+            - kannaktopus_wake
+        source: { type: ["string", "null"] }
+        summary: { type: string }
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt: { type: string, format: date-time }
+
+    AdapterHealth:
+      type: object
+      required: [name, baseUrl, ok, mode, message]
+      properties:
+        name: { type: string }
+        baseUrl: { type: string }
+        ok: { type: boolean }
+        mode:
+          type: string
+          enum: [live, mock]
+        message: { type: string }
+        latencyMs: { type: ["integer", "null"] }
+
+    AdapterEvent:
+      type: object
+      required: [id, type, summary, raw, createdAt]
+      properties:
+        id: { type: string }
+        type: { type: string }
+        summary: { type: string }
+        raw:
+          type: object
+          additionalProperties: true
+        createdAt: { type: string, format: date-time }
+
+    AdapterPullResult:
+      type: object
+      required: [pulled, mode]
+      properties:
+        pulled: { type: integer }
+        mode:
+          type: string
+          enum: [live, mock]
+        signalIds:
+          type: array
+          items: { type: string }
+        resonanceIds:
+          type: array
+          items: { type: string }
+
+    Resonance:
+      type: object
+      required:
+        [
+          id,
+          intent,
+          tags,
+          priority,
+          status,
+          responses,
+          createdAt,
+        ]
+      properties:
+        id: { type: string }
+        intent: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        priority: { type: number }
+        constraints:
+          type: object
+          additionalProperties: true
+        status:
+          type: string
+          enum: [active, resolved, expired]
+        responses:
+          type: array
+          items: { $ref: "#/components/schemas/ResonanceResponse" }
+        selectedResponseId: { type: ["string", "null"] }
+        mergedOutput: { type: ["string", "null"] }
+        coherenceScore: { type: ["number", "null"] }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: ["string", "null"], format: date-time }
+
+    ResonanceResponse:
+      type: object
+      required: [id, resonanceId, agentId, score, output, createdAt]
+      properties:
+        id: { type: string }
+        resonanceId: { type: string }
+        agentId: { type: string }
+        agentName: { type: ["string", "null"] }
+        score: { type: number }
+        output: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    CreateResonanceBody:
+      type: object
+      required: [intent, tags]
+      properties:
+        intent: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        priority: { type: ["number", "null"] }
+        constraints:
+          type: object
+          additionalProperties: true
+        ttlSeconds: { type: ["integer", "null"] }
+
+    RespondResonanceBody:
+      type: object
+      required: [agentId, score, output]
+      properties:
+        agentId: { type: string }
+        score: { type: number }
+        output: { type: string }
+
+    ResolveResonanceBody:
+      type: object
+      properties:
+        strategy:
+          type: ["string", "null"]
+          enum: [best, merge, null]
+
+    DemoResult:
+      type: object
+      required: [created]
+      properties:
+        created:
+          type: array
+          items: { type: string }
+        message: { type: ["string", "null"] }

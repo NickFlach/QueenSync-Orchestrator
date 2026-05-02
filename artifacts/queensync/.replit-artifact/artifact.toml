@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "QueenSync"
+version = "1.0.0"
+id = "artifacts/queensync"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18197
+
+[services.development]
+run = "pnpm --filter @workspace/queensync run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/queensync", "run", "build" ]
+publicDir = "artifacts/queensync/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18197"
+BASE_PATH = "/"
