@@ -13,6 +13,7 @@ import {
   radioHealth,
   radioPullEvents,
   type AdapterEventOut,
+  type AdapterPullOut,
 } from "../lib/adapters";
 import { recordLog } from "../lib/log";
 import { broadcast } from "../lib/ws";
@@ -22,14 +23,28 @@ import { requireOperator } from "../lib/auth";
 
 const router: IRouter = Router();
 
-let lastRadio: Awaited<ReturnType<typeof radioPullEvents>> = {
+let lastRadio: AdapterPullOut = {
   mode: "mock",
   events: [],
+  stale: false,
+  lastSuccessAt: null,
+  metricsSuppressed: false,
+  note: null,
 };
-let lastObservatory: Awaited<ReturnType<typeof observatoryPullEvents>> = {
+let lastObservatory: AdapterPullOut = {
   mode: "mock",
   events: [],
+  stale: false,
+  lastSuccessAt: null,
+  metricsSuppressed: false,
+  note: null,
 };
+
+// ─── Tag vocabulary (per ADR-002 Wave 1) ──────────────────────────────────
+//   Radio:        radio / signal / analysis  +  per-event subtype
+//   Observatory:  observation / anomaly / pattern  +  per-event subtype
+const RADIO_BASE_TAGS = ["radio", "signal", "analysis"];
+const OBS_BASE_TAGS = ["observation", "anomaly", "pattern"];
 
 router.get("/adapters/radio/health", async (_req, res): Promise<void> => {
   res.json(await radioHealth());
@@ -47,17 +62,28 @@ router.post("/adapters/radio/pull", requireOperator, async (_req, res): Promise<
     result.events,
     "radio_transmission",
     "radio.ninja-portal.com",
+    RADIO_BASE_TAGS,
     "transmit",
   );
   await recordLog({
     eventType: "adapter_pull",
     source: "radio",
-    summary: `Pulled ${result.events.length} radio events (${result.mode})`,
-    metadata: { mode: result.mode },
+    summary: `Pulled ${result.events.length} radio events (${result.mode}${result.stale ? ", stale" : ""})`,
+    metadata: {
+      mode: result.mode,
+      stale: result.stale,
+      lastSuccessAt: result.lastSuccessAt,
+    },
   });
   broadcast({
     type: "adapter_pull",
-    data: { adapter: "radio", mode: result.mode, count: result.events.length },
+    data: {
+      adapter: "radio",
+      mode: result.mode,
+      count: result.events.length,
+      stale: result.stale,
+      note: result.note,
+    },
   });
   res.json({
     pulled: result.events.length,
@@ -65,6 +91,10 @@ router.post("/adapters/radio/pull", requireOperator, async (_req, res): Promise<
     signalIds: conv.signalIds,
     resonanceIds: conv.resonanceIds,
     taskIds: conv.taskIds,
+    stale: result.stale,
+    lastSuccessAt: result.lastSuccessAt,
+    metricsSuppressed: result.metricsSuppressed,
+    note: result.note,
   });
 });
 
@@ -94,13 +124,19 @@ router.post(
       result.events,
       "observation_event",
       "observatory.ninja-portal.com",
+      OBS_BASE_TAGS,
       "observe",
     );
     await recordLog({
       eventType: "adapter_pull",
       source: "observatory",
-      summary: `Pulled ${result.events.length} observatory events (${result.mode})`,
-      metadata: { mode: result.mode },
+      summary: `Pulled ${result.events.length} observatory events (${result.mode}${result.stale ? ", stale" : ""}${result.metricsSuppressed ? ", metrics suppressed" : ""})`,
+      metadata: {
+        mode: result.mode,
+        stale: result.stale,
+        metricsSuppressed: result.metricsSuppressed,
+        lastSuccessAt: result.lastSuccessAt,
+      },
     });
     broadcast({
       type: "adapter_pull",
@@ -108,6 +144,9 @@ router.post(
         adapter: "observatory",
         mode: result.mode,
         count: result.events.length,
+        stale: result.stale,
+        metricsSuppressed: result.metricsSuppressed,
+        note: result.note,
       },
     });
     res.json({
@@ -116,6 +155,10 @@ router.post(
       signalIds: conv.signalIds,
       resonanceIds: conv.resonanceIds,
       taskIds: conv.taskIds,
+      stale: result.stale,
+      lastSuccessAt: result.lastSuccessAt,
+      metricsSuppressed: result.metricsSuppressed,
+      note: result.note,
     });
   },
 );
@@ -124,7 +167,8 @@ async function convertEventsToSignalsAndResonance(
   events: AdapterEventOut[],
   signalType: string,
   source: string,
-  baseTag: string,
+  baseTags: string[],
+  capability: string,
 ): Promise<{ signalIds: string[]; resonanceIds: string[]; taskIds: string[] }> {
   const signalIds: string[] = [];
   const resonanceIds: string[] = [];
@@ -143,13 +187,12 @@ async function convertEventsToSignalsAndResonance(
     signalIds.push(signal.id);
     broadcast({ type: "signal_received", data: signal });
 
-    // Always create a task so the canonical signal -> task loop runs.
     const [task] = await db
       .insert(tasksTable)
       .values({
         id: nanoid(12),
         intent: e.summary,
-        requiredCapability: baseTag,
+        requiredCapability: capability,
         priority: 5,
         source: `adapter:${source}`,
         context: { ...e.raw, signalId: signal.id, eventType: e.type },
@@ -164,9 +207,8 @@ async function convertEventsToSignalsAndResonance(
       .where(eq(signalsTable.id, signal.id));
     void dispatchTask(task);
 
-    const tags = Array.from(
-      new Set([baseTag, ...e.type.split(".").filter(Boolean)]),
-    );
+    const subtypeTags = e.type.split(".").filter(Boolean);
+    const tags = Array.from(new Set([...baseTags, ...subtypeTags]));
     const [field] = await db
       .insert(resonanceFieldsTable)
       .values({

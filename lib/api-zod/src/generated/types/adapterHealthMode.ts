@@ -12,4 +12,6 @@ export type AdapterHealthMode =
 export const AdapterHealthMode = {
   live: "live",
   mock: "mock",
+  stale: "stale",
+  forced_mock: "forced_mock",
 } as const;

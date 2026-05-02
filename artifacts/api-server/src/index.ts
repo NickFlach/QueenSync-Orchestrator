@@ -4,6 +4,7 @@ import { logger } from "./lib/logger";
 import { attachWebSocket } from "./lib/ws";
 import { seedDefaults } from "./lib/seed";
 import { expireOldResonance } from "./lib/resonance";
+import { startFloorPoller } from "./lib/floor-poller";
 
 const rawPort = process.env["PORT"];
 
@@ -27,6 +28,7 @@ server.listen(port, () => {
   void seedDefaults().catch((err) =>
     logger.error({ err }, "seed failed"),
   );
+  startFloorPoller();
   setInterval(() => {
     void expireOldResonance().catch((err) =>
       logger.error({ err }, "expire failed"),

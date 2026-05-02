@@ -12,4 +12,6 @@ export type AdapterPullResultMode =
 export const AdapterPullResultMode = {
   live: "live",
   mock: "mock",
+  stale: "stale",
+  forced_mock: "forced_mock",
 } as const;

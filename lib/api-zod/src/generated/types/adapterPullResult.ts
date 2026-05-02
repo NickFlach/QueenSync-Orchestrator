@@ -12,4 +12,10 @@ export interface AdapterPullResult {
   mode: AdapterPullResultMode;
   signalIds?: string[];
   resonanceIds?: string[];
+  stale?: boolean;
+  /** @nullable */
+  lastSuccessAt?: Date | null;
+  metricsSuppressed?: boolean;
+  /** @nullable */
+  note?: string | null;
 }

@@ -15,4 +15,9 @@ export interface AdapterHealth {
   message: string;
   /** @nullable */
   latencyMs?: number | null;
+  stale?: boolean;
+  /** @nullable */
+  lastSuccessAt?: Date | null;
+  metricsSuppressed?: boolean;
+  forceMock?: boolean;
 }

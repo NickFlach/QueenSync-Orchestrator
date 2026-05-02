@@ -393,6 +393,8 @@ export type AdapterHealthMode =
 export const AdapterHealthMode = {
   live: "live",
   mock: "mock",
+  stale: "stale",
+  forced_mock: "forced_mock",
 } as const;
 
 export interface AdapterHealth {
@@ -403,6 +405,11 @@ export interface AdapterHealth {
   message: string;
   /** @nullable */
   latencyMs?: number | null;
+  stale?: boolean;
+  /** @nullable */
+  lastSuccessAt?: string | null;
+  metricsSuppressed?: boolean;
+  forceMock?: boolean;
 }
 
 export type AdapterEventRaw = { [key: string]: unknown };
@@ -421,6 +428,8 @@ export type AdapterPullResultMode =
 export const AdapterPullResultMode = {
   live: "live",
   mock: "mock",
+  stale: "stale",
+  forced_mock: "forced_mock",
 } as const;
 
 export interface AdapterPullResult {
@@ -428,6 +437,12 @@ export interface AdapterPullResult {
   mode: AdapterPullResultMode;
   signalIds?: string[];
   resonanceIds?: string[];
+  stale?: boolean;
+  /** @nullable */
+  lastSuccessAt?: string | null;
+  metricsSuppressed?: boolean;
+  /** @nullable */
+  note?: string | null;
 }
 
 export type ResonanceConstraints = { [key: string]: unknown };

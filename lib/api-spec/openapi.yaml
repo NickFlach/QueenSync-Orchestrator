@@ -826,9 +826,13 @@ components:
         ok: { type: boolean }
         mode:
           type: string
-          enum: [live, mock]
+          enum: [live, mock, stale, forced_mock]
         message: { type: string }
         latencyMs: { type: ["integer", "null"] }
+        stale: { type: boolean }
+        lastSuccessAt: { type: ["string", "null"], format: date-time }
+        metricsSuppressed: { type: boolean }
+        forceMock: { type: boolean }
 
     AdapterEvent:
       type: object
@@ -849,13 +853,17 @@ components:
         pulled: { type: integer }
         mode:
           type: string
-          enum: [live, mock]
+          enum: [live, mock, stale, forced_mock]
         signalIds:
           type: array
           items: { type: string }
         resonanceIds:
           type: array
           items: { type: string }
+        stale: { type: boolean }
+        lastSuccessAt: { type: ["string", "null"], format: date-time }
+        metricsSuppressed: { type: boolean }
+        note: { type: ["string", "null"] }
 
     Resonance:
       type: object

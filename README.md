@@ -106,10 +106,17 @@ The Replit workflows (`artifacts/api-server: API Server` and
      so external arms can be authenticated on callback.
    - `QUEENSYNC_API_KEY=<shared secret>` — only required if you onboard arms
      with `authMethod` set to `api_key`, `bearer`, or `jwt`.
-   - `QUEENSYNC_ALLOWED_HOSTS=radio.ninja-portal.com,observatory.ninja-portal.com,<…any-arm-host…>`
-     to restrict outbound dispatch / connection-test to known hosts.
-   - `RADIO_BASE_URL` and `OBSERVATORY_BASE_URL` — set to the live endpoints
-     once Radio / Observatory are deployed; leave unset for mock mode.
+   - `QUEENSYNC_ALLOWED_HOSTS=radio.ninja-portal.com,observatory.ninja-portal.com,170.9.238.136,<…any-arm-host…>`
+     to restrict outbound dispatch / connection-test to known hosts. The
+     `170.9.238.136` Oracle public IP is the fallback host for the
+     observatory before its domain mapping is finalized.
+   - `RADIO_BASE_URL` and `OBSERVATORY_BASE_URL` — point at the live endpoints
+     (defaults: `https://radio.ninja-portal.com`,
+     `https://observatory.ninja-portal.com`). Set
+     `QUEENSYNC_FORCE_MOCK=true` to ignore them and serve mock data, useful
+     for local development without the constellation. If you need to fall
+     back to the raw observatory IP (`http://170.9.238.136:3334`), also set
+     `QUEENSYNC_ALLOW_HTTP=true`.
 4. **Deploy** via Replit Deployments. Choose a Reserved VM (the API server
    holds long-lived WebSocket connections — Autoscale will cut them).
 5. **Custom domain** — in the Deployments panel, add `ninja-portal.com` (and
@@ -412,9 +419,33 @@ See `.env.example` for the complete list. Highlights:
 - `QUEENSYNC_ALLOWED_HOSTS` — explicit outbound allowlist (overrides default
   private-host blocklist)
 - `QUEENSYNC_ALLOW_PRIVATE_HOSTS` — set to `true` only for local dev
-- `RADIO_BASE_URL`, `OBSERVATORY_BASE_URL` — adapter targets (optional, mock
-  fallback). `OBSERVATORY_BASE_URL` is also the source for the Hologram TV
-  HRM bridge.
+- `RADIO_BASE_URL`, `OBSERVATORY_BASE_URL` — adapter targets (default to
+  `https://radio.ninja-portal.com` and `https://observatory.ninja-portal.com`).
+  `OBSERVATORY_BASE_URL` is also the source for the Hologram TV HRM bridge.
+- `QUEENSYNC_FORCE_MOCK` — when `true`, both adapters serve mock data
+  regardless of the live endpoints. Useful for local dev. Health surfaces
+  this as `mode=forced_mock` and a "QUEENSYNC_FORCE_MOCK" badge in the UI.
+- `QUEENSYNC_FLOOR_POLL_MS` — interval (ms) for the radio floor-reactions
+  poller. Defaults to `1000` so listener 🪶 reactions appear in the Signal
+  Feed within ~1s. Set `QUEENSYNC_DISABLE_FLOOR_POLL=true` to disable it.
+
+### External Sites
+
+QueenSync v2.0 Wave 1 talks to these constellation services over HTTP. The
+SSRF allowlist (`QUEENSYNC_ALLOWED_HOSTS`) must include them in production:
+
+| Host | Purpose | Endpoints used |
+|---|---|---|
+| `radio.ninja-portal.com` | kannaka-radio venue | `/api/now-playing`, `/api/state`, `/api/floor`, `/api/history`, `/api/dreams`, `/api/swarm` |
+| `observatory.ninja-portal.com` | kannaka-observatory consciousness snapshot | `/api/state` |
+| `170.9.238.136` | Oracle public IP fallback for the observatory while a domain is being mapped (port 3334, http only — requires `QUEENSYNC_ALLOW_HTTP=true`) | `/api/state` |
+
+Each adapter pull degrades gracefully: if the live endpoint fails, the
+in-memory last-success cache is served and surfaced as `mode=stale`. If
+there is no cache yet, mock data is served as `mode=mock`. Observatory
+responses with `phi=xi=order=0` set `metricsSuppressed=true` (the bloated
+HRM situation called out in ADR-002) and the Adapters page shows a
+"metrics suppressed" badge.
 - `KANNAKTOPUS_WAKE_URL`, `KANNAKTOPUS_API_KEY` — optional wake-poke endpoint
   fired by the "Wake Kannaktopus" demo button.
 

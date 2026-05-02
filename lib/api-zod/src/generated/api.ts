@@ -414,9 +414,13 @@ export const RadioAdapterHealthResponse = zod.object({
   name: zod.string(),
   baseUrl: zod.string(),
   ok: zod.boolean(),
-  mode: zod.enum(["live", "mock"]),
+  mode: zod.enum(["live", "mock", "stale", "forced_mock"]),
   message: zod.string(),
   latencyMs: zod.number().nullish(),
+  stale: zod.boolean().optional(),
+  lastSuccessAt: zod.coerce.date().nullish(),
+  metricsSuppressed: zod.boolean().optional(),
+  forceMock: zod.boolean().optional(),
 });
 
 export const RadioAdapterSignalsResponseItem = zod.object({
@@ -432,18 +436,26 @@ export const RadioAdapterSignalsResponse = zod.array(
 
 export const RadioAdapterPullResponse = zod.object({
   pulled: zod.number(),
-  mode: zod.enum(["live", "mock"]),
+  mode: zod.enum(["live", "mock", "stale", "forced_mock"]),
   signalIds: zod.array(zod.string()).optional(),
   resonanceIds: zod.array(zod.string()).optional(),
+  stale: zod.boolean().optional(),
+  lastSuccessAt: zod.coerce.date().nullish(),
+  metricsSuppressed: zod.boolean().optional(),
+  note: zod.string().nullish(),
 });
 
 export const ObservatoryAdapterHealthResponse = zod.object({
   name: zod.string(),
   baseUrl: zod.string(),
   ok: zod.boolean(),
-  mode: zod.enum(["live", "mock"]),
+  mode: zod.enum(["live", "mock", "stale", "forced_mock"]),
   message: zod.string(),
   latencyMs: zod.number().nullish(),
+  stale: zod.boolean().optional(),
+  lastSuccessAt: zod.coerce.date().nullish(),
+  metricsSuppressed: zod.boolean().optional(),
+  forceMock: zod.boolean().optional(),
 });
 
 export const ObservatoryAdapterEventsResponseItem = zod.object({
@@ -459,9 +471,13 @@ export const ObservatoryAdapterEventsResponse = zod.array(
 
 export const ObservatoryAdapterPullResponse = zod.object({
   pulled: zod.number(),
-  mode: zod.enum(["live", "mock"]),
+  mode: zod.enum(["live", "mock", "stale", "forced_mock"]),
   signalIds: zod.array(zod.string()).optional(),
   resonanceIds: zod.array(zod.string()).optional(),
+  stale: zod.boolean().optional(),
+  lastSuccessAt: zod.coerce.date().nullish(),
+  metricsSuppressed: zod.boolean().optional(),
+  note: zod.string().nullish(),
 });
 
 /**
