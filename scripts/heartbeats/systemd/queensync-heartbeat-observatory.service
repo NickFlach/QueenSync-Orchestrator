@@ -1,0 +1,44 @@
+[Unit]
+Description=QueenSync heartbeat sidecar for Observatory
+Documentation=file:///opt/queensync-heartbeat/README.md
+# Lifecycle:
+#   - After=  : start ordering — boot only after observatory.service is up.
+#   - BindsTo=: stop the sidecar the instant observatory.service stops.
+#   - PartOf= : restart the sidecar whenever observatory.service restarts.
+# [Install] WantedBy=observatory.service below makes `systemctl enable`
+# attach this unit to observatory.service's start transaction so the
+# sidecar starts every time observatory starts (boot, restart, crash).
+After=observatory.service
+BindsTo=observatory.service
+PartOf=observatory.service
+
+[Service]
+Type=simple
+User=opc
+Group=opc
+EnvironmentFile=/etc/queensync-heartbeat-observatory.env
+# Required env vars (provided via the EnvironmentFile above):
+#   QUEENSYNC_BASE_URL=https://queensync.example.com
+#   QUEENSYNC_OPERATOR_TOKEN=<operator bearer token>
+#   QUEENSYNC_ARM_ID=observatory
+# Optional:
+#   QUEENSYNC_HEARTBEAT_SECONDS=30
+ExecStart=/usr/bin/python3 /opt/queensync-heartbeat/queensync_heartbeat.py
+Restart=on-failure
+RestartSec=5s
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+
+[Install]
+# See queensync-heartbeat-radio.service for rationale — install the
+# symlink under the arm unit's .wants/ so the sidecar joins every
+# observatory.service start transaction.
+WantedBy=observatory.service

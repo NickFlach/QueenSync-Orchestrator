@@ -1,0 +1,48 @@
+[Unit]
+Description=QueenSync heartbeat sidecar for Radio
+Documentation=file:///opt/queensync-heartbeat/README.md
+# Lifecycle:
+#   - After=  : start ordering — boot only after radio.service is up.
+#   - BindsTo=: stop the sidecar the instant radio.service stops.
+#   - PartOf= : restart the sidecar whenever radio.service is restarted.
+# Combined with [Install] WantedBy=radio.service below, `systemctl enable`
+# attaches this unit to radio.service's start transaction so the sidecar
+# also starts every time radio.service starts (after maintenance, after
+# a daemon-reload, after a crash-and-restart, etc.).
+After=radio.service
+BindsTo=radio.service
+PartOf=radio.service
+
+[Service]
+Type=simple
+User=opc
+Group=opc
+EnvironmentFile=/etc/queensync-heartbeat-radio.env
+# Required env vars (provided via the EnvironmentFile above):
+#   QUEENSYNC_BASE_URL=https://queensync.example.com
+#   QUEENSYNC_OPERATOR_TOKEN=<operator bearer token>
+#   QUEENSYNC_ARM_ID=radio
+# Optional:
+#   QUEENSYNC_HEARTBEAT_SECONDS=30
+ExecStart=/usr/bin/python3 /opt/queensync-heartbeat/queensync_heartbeat.py
+Restart=on-failure
+RestartSec=5s
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+
+[Install]
+# Tie this sidecar to the arm unit (NOT multi-user.target) so
+# `systemctl enable` installs the symlink under radio.service.wants/.
+# That makes systemd pull the sidecar into every radio.service start
+# transaction — the sidecar comes up with the arm on boot, after a
+# maintenance restart, and after a crash-restart. Without this, the
+# sidecar would only follow stops (via BindsTo), not subsequent starts.
+WantedBy=radio.service

@@ -175,6 +175,40 @@ Do **not** open port 8090 directly to the public internet. The seeded
 you change it to plain `http://`, QueenSync will still dispatch but
 you've lost replay protection.
 
+## Heartbeat to QueenSync
+
+The shim reports liveness to the Queen Console via **two** independent paths
+— either is sufficient. When both are wired the freshest signal wins, and
+either side staying quiet for ~3 minutes demotes the `oracle-admin` arm
+card to `offline` (QueenSync's `heartbeat-scheduler.ts` does the demotion).
+
+1. **Inbound probe (default).** QueenSync's heartbeat scheduler GETs
+   `${QUEENSYNC_ORACLE_ADMIN_HEARTBEAT_URL}` (defaults to
+   `https://oracle-admin.ninja-portal.com/healthz`) every 60s and refreshes
+   `lastHeartbeat` on a 2xx. The `/healthz` route lives in `src/index.ts`
+   and only needs the shim to be reachable from the QueenSync host.
+
+2. **Outbound self-heartbeat (recommended when QueenSync can't reach back).**
+   When `QUEENSYNC_BASE_URL` and `QUEENSYNC_OPERATOR_TOKEN` are set in the
+   environment, the shim runs the client in `src/heartbeat.ts` —
+   `POST ${QUEENSYNC_BASE_URL}/api/arms/oracle-admin/heartbeat` immediately at
+   boot and then every 30s (override with `QUEENSYNC_HEARTBEAT_MS`). It's
+   wired in `src/index.ts` (the `maybeStartHeartbeatFromEnv(logger)` call
+   inside `server.listen`).
+
+   Add to `/etc/queensync-oracle-admin.env`:
+
+   ```ini
+   QUEENSYNC_BASE_URL=https://queensync.example.com
+   QUEENSYNC_OPERATOR_TOKEN=<operator bearer token from QueenSync>
+   # Optional:
+   # QUEENSYNC_ARM_ID=oracle-admin
+   # QUEENSYNC_HEARTBEAT_MS=30000
+   ```
+
+   The poster never throws — a transient QueenSync outage logs a single
+   WARN and the next interval retries.
+
 ## Local development
 
 ```bash

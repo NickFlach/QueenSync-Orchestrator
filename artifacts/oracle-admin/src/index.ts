@@ -12,6 +12,7 @@ import {
   SlidingWindowRateLimiter,
 } from "./security";
 import { incrementDispatch, renderJson, renderPrometheus } from "./metrics";
+import { maybeStartHeartbeatFromEnv } from "./heartbeat";
 
 const logger = pino({ level: process.env["LOG_LEVEL"] ?? "info" });
 
@@ -278,4 +279,9 @@ server.listen(PORT, HOST, () => {
     },
     "oracle-admin shim listening",
   );
+  // Start the periodic self-heartbeat poster when QUEENSYNC_BASE_URL +
+  // QUEENSYNC_OPERATOR_TOKEN are configured. This ensures the arm card
+  // flips to `idle` in the Queen Console within seconds of boot even if
+  // QueenSync's outbound probe to /healthz is blocked by NAT/firewall.
+  maybeStartHeartbeatFromEnv(logger);
 });

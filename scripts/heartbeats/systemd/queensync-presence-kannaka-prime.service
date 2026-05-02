@@ -1,0 +1,44 @@
+[Unit]
+Description=QueenSync NATS presence sidecar for Kannaka Prime
+Documentation=file:///opt/queensync-heartbeat/README.md
+# Lifecycle:
+#   - After=  : start ordering — boot only after kannaka-prime.service is up.
+#   - BindsTo=: stop the sidecar the instant kannaka-prime stops (and
+#               the SIGTERM lets the script publish queen.event.leave so
+#               the Console flips to offline immediately).
+#   - PartOf= : restart the sidecar whenever kannaka-prime is restarted.
+# [Install] WantedBy=kannaka-prime.service below pulls this unit into
+# kannaka-prime's start transaction so the sidecar starts with the arm.
+After=kannaka-prime.service
+BindsTo=kannaka-prime.service
+PartOf=kannaka-prime.service
+
+[Service]
+Type=simple
+User=opc
+Group=opc
+EnvironmentFile=/etc/queensync-presence-kannaka-prime.env
+# Required env vars (provided via the EnvironmentFile above):
+#   NATS_URL=nats://nats.example.com:4222
+#   QUEENSYNC_ARM_ID=kannaka-prime
+# Optional:
+#   QUEENSYNC_HEARTBEAT_SECONDS=30
+ExecStart=/usr/bin/python3 /opt/queensync-heartbeat/queensync_presence.py
+Restart=on-failure
+RestartSec=5s
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+
+[Install]
+# Tie to the arm unit (not multi-user.target) so `systemctl enable`
+# attaches us to kannaka-prime.service's start transaction. The arm
+# starting → sidecar starting → queen.event.join → Console idle.
+WantedBy=kannaka-prime.service

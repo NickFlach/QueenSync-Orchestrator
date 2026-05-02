@@ -1,0 +1,41 @@
+[Unit]
+Description=QueenSync NATS presence sidecar for Swarm Worker
+Documentation=file:///opt/queensync-heartbeat/README.md
+# Run exactly ONE instance of this sidecar per swarm-worker arm row.
+# QueenSync's nats-bridge.ts → handlePresence has no per-instance
+# refcount: any queen.event.leave for armId=swarm-worker immediately
+# demotes the arm card. Wire this sidecar to the swarm-worker
+# *service unit* (which itself manages however many worker processes
+# the queue group needs) — not to each individual worker process.
+After=kannaka-swarm-worker.service
+BindsTo=kannaka-swarm-worker.service
+PartOf=kannaka-swarm-worker.service
+
+[Service]
+Type=simple
+User=opc
+Group=opc
+EnvironmentFile=/etc/queensync-presence-swarm-worker.env
+# Required env vars (provided via the EnvironmentFile above):
+#   NATS_URL=nats://nats.example.com:4222
+#   QUEENSYNC_ARM_ID=swarm-worker
+# Optional:
+#   QUEENSYNC_HEARTBEAT_SECONDS=30
+ExecStart=/usr/bin/python3 /opt/queensync-heartbeat/queensync_presence.py
+Restart=on-failure
+RestartSec=5s
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+
+[Install]
+# Tie to the swarm-worker arm unit so `systemctl enable` attaches us
+# to its start transaction.
+WantedBy=kannaka-swarm-worker.service
