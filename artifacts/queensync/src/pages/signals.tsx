@@ -2,7 +2,12 @@ import { useState } from "react";
 import {
   useListSignals,
   useInjectSignal,
+  useRadioAdapterHealth,
+  useObservatoryAdapterHealth,
   getListSignalsQueryKey,
+  getRadioAdapterHealthQueryKey,
+  getObservatoryAdapterHealthQueryKey,
+  AdapterHealth,
   Signal,
   InjectSignalBodyType,
 } from "@workspace/api-client-react";
@@ -29,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Radio, Plus } from "lucide-react";
+import { Radio, Plus, AlertTriangle, EyeOff, FlaskConical } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
@@ -43,11 +48,91 @@ const SIGNAL_TYPES: InjectSignalBodyType[] = [
   "other",
 ];
 
+function AdapterStatusBadges({
+  label,
+  health,
+}: {
+  label: string;
+  health: AdapterHealth | undefined;
+}) {
+  if (!health) return null;
+  const slug = label.toLowerCase();
+  const modeClass =
+    health.mode === "live"
+      ? "border-primary/60 text-primary"
+      : health.mode === "stale"
+        ? "border-amber-500/60 text-amber-500"
+        : health.mode === "forced_mock"
+          ? "border-fuchsia-500/60 text-fuchsia-400"
+          : "border-muted-foreground/40 text-muted-foreground";
+  return (
+    <div
+      className="flex flex-wrap items-center gap-2"
+      data-testid={`signal-feed-status-${slug}`}
+    >
+      <span className="text-[10px] uppercase text-muted-foreground tracking-wider">
+        {label}
+      </span>
+      <Badge
+        variant="outline"
+        className={`text-[10px] uppercase ${modeClass}`}
+        data-testid={`signal-feed-mode-${slug}`}
+      >
+        {health.mode}
+      </Badge>
+      {health.stale && (
+        <Badge
+          variant="outline"
+          className="text-[10px] uppercase border-amber-500/60 text-amber-500 flex items-center gap-1"
+          data-testid={`signal-feed-stale-${slug}`}
+        >
+          <AlertTriangle className="w-3 h-3" /> stale
+        </Badge>
+      )}
+      {health.metricsSuppressed && (
+        <Badge
+          variant="outline"
+          className="text-[10px] uppercase border-orange-500/60 text-orange-500 flex items-center gap-1"
+          data-testid={`signal-feed-suppressed-${slug}`}
+        >
+          <EyeOff className="w-3 h-3" /> metrics suppressed
+        </Badge>
+      )}
+      {health.forceMock && (
+        <Badge
+          variant="outline"
+          className="text-[10px] uppercase border-fuchsia-500/60 text-fuchsia-400 flex items-center gap-1"
+          data-testid={`signal-feed-forced-mock-${slug}`}
+        >
+          <FlaskConical className="w-3 h-3" /> forced mock
+        </Badge>
+      )}
+      {health.lastSuccessAt && (
+        <span className="text-[10px] text-muted-foreground/70">
+          last live {new Date(health.lastSuccessAt).toLocaleTimeString()}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function SignalsIngestion() {
   const { data: signals, isLoading } = useListSignals({
     query: {
       refetchInterval: 8000,
       queryKey: getListSignalsQueryKey(),
+    },
+  });
+  const { data: radioHealth } = useRadioAdapterHealth({
+    query: {
+      refetchInterval: 10000,
+      queryKey: getRadioAdapterHealthQueryKey(),
+    },
+  });
+  const { data: obsHealth } = useObservatoryAdapterHealth({
+    query: {
+      refetchInterval: 10000,
+      queryKey: getObservatoryAdapterHealthQueryKey(),
     },
   });
   const queryClient = useQueryClient();
@@ -182,6 +267,16 @@ export default function SignalsIngestion() {
           </DialogContent>
         </Dialog>
       </div>
+
+      <Card className="bg-card border-border/50">
+        <CardContent className="p-4 space-y-3">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Adapter Feed Status
+          </div>
+          <AdapterStatusBadges label="Radio" health={radioHealth} />
+          <AdapterStatusBadges label="Observatory" health={obsHealth} />
+        </CardContent>
+      </Card>
 
       <div className="space-y-3">
         {signals?.map((signal: Signal) => (
