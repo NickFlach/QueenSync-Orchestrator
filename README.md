@@ -470,14 +470,42 @@ Memory Stream hides compacted rows by default; toggle "Show compacted" to
 see what each compression replaced (children render grouped under the
 parent compression row).
 
-**kannaka-memory adapter stub.** Every approved event (and every Dream
-Lite compression) is mirrored through
-`artifacts/api-server/src/lib/memory-adapter.ts → pushToKannakaMemory(event)`.
-Today the function is a no-op that just logs. The header comment in that
-file documents the planned wire shape (HMAC-signed POST to
-`KANNAKA_MEMORY_URL/api/remember`, stamp returned `memoryId` back onto
-metadata, stream subsequent updates over `KANNAKA.memory.echo`). The live
-bridge lands under v2 Wave 4.
+**kannaka-memory absorb bridge (v2 Wave 4 — supersedes Draft #9).** The
+no-op `pushToKannakaMemory` HTTP stub is gone. Approved memory events
+become HRM-eligible only when an operator clicks **Absorb to HRM** in the
+Memory Gate UI; that publishes the event on `KANNAKA.absorb` (via the
+shared NATS client from Wave 2) with an idempotency key derived from the
+existing 24h dedupe `contentHash`. kannaka-memory's swarm-worker (per
+`kannaka-memory` ADR-0026 Phase 6) consumes the subject, dedupes on the
+key, absorbs into the HRM, and acks on `KANNAKA.absorb.ack`. The ack
+handler in `nats-bridge.ts` updates `memory_events.absorb_state` to
+`absorbed` (with `absorbed_at`) or `failed` (with `last_absorb_error`).
+
+The Memory Gate page splits the per-event action into two buttons:
+**Approve (local)** parks the event with `absorb_state="not_required"`
+and never publishes; **Absorb to HRM** publishes and marks the event
+`pending`. Failed absorbs (NATS down or HRM nack) flip back to a
+**Retry Absorb** action — the row carries the failure reason.
+
+**Inbound exemplars.** HRM-side exemplar candidates arrive on
+`KANNAKA.exemplars` and land in QueenSync as `decision="pending"`,
+`inbound_exemplar=true` rows. The Memory Gate "Inbound HRM exemplars"
+section lets the operator **Re-absorb (strengthen)** — which republishes
+on `KANNAKA.absorb` — or **Reject (prune)** which marks the row rejected
+locally with no publish. Strengthened/pruned/pending counters are
+served by `GET /api/memory/exemplars/stats`.
+
+**Dream Lite (HRM dispatch).** The Memory Gate's Dream Lite button
+dispatches a real task with `requiredCapability=dream` so an
+onboarded `kannaka-prime` arm picks it up; the response includes the task
+id so the UI can subscribe to its progress (a real cycle can take 5+
+minutes on a bloated medium). When no `dream`-capable arm is registered,
+the route falls back to the in-process compaction so the local audit
+trail still records the operator's intent.
+
+**Trace this event.** `GET /api/memory/:id/trace` walks the chain
+signal → resonance → arm response → memory candidate → absorb log → HRM
+ack and powers the per-row "Trace" dialog in the Memory Gate UI.
 
 The repo for the canonical substrate:
 [github.com/NickFlach/kannaka-memory](https://github.com/NickFlach/kannaka-memory).

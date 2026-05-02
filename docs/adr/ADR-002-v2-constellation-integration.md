@@ -361,6 +361,68 @@ tunnel (Tailscale/WireGuard). The README runbook covers both.
 signal → resonance field → arm response → memory event candidate →
 Memory Gate approval → HRM absorption. End-to-end visible in the UI.
 
+#### Wave 4 — implementation notes (delivered)
+
+- **Subjects (per ADR-0026 Phase 6 contract).** Outbound:
+  `KANNAKA.absorb` carries `{ idempotencyKey, memoryId, type, tag, tags,
+  summary, content, importance, agentId, sourceTaskId, sourceResonanceId,
+  sourceAttribution, metadata, createdAt }`. Inbound acks:
+  `KANNAKA.absorb.ack` with `{ idempotencyKey?, memoryId?, status:
+  "absorbed"|"rejected"|"failed", hrmId?, reason? }`. The ack handler
+  prefers `memoryId` and falls back to `idempotencyKey` when correlating.
+  Inbound exemplars stay on `KANNAKA.exemplars` (Wave 2 subscription).
+- **Idempotency key.** Derived from the existing 24h dedupe
+  `contentHash` so repeated publishes of the same event resolve to a
+  single HRM absorb. Persisted on `memory_events.idempotency_key` once
+  the first publish lands.
+- **Schema additions on `memory_events`** (single migration via
+  `pnpm --filter @workspace/db push`): `absorb_state` (enum: `not_required`
+  /`pending`/`absorbed`/`failed`), `absorb_state_updated_at`,
+  `absorb_attempts`, `absorbed_at`, `last_absorb_error`,
+  `idempotency_key`, `inbound_exemplar`, `exemplar_outcome`
+  (`strengthened`/`pruned`/null). The `decision` column adds a `pending`
+  value used for inbound exemplars and any other event awaiting an
+  operator decision.
+- **Operator actions (split per ADR).** `POST /api/memory/:id/local-approve`
+  marks `absorb_state=not_required` (also reverts a pending/failed row
+  to local-only and promotes a pending decision to approved). `POST
+  /api/memory/:id/absorb` calls `publishAbsorb()` and flips state to
+  `pending` on success or `failed` (with `last_absorb_error`) on a NATS
+  publish error. `POST /api/memory/:id/exemplar/decide` accepts
+  `{outcome:"strengthened"}` (re-publishes via the shared absorb path)
+  or `{outcome:"pruned"}` (no publish, marks the row rejected).
+- **Trace endpoint.** `GET /api/memory/:id/trace` walks
+  `signal → resonance → arm responses → memory candidate → absorb log
+  events (memory_absorb_published / memory_absorbed / memory_absorb_nack
+  / memory_exemplar_pruned / memory_local_approved) → HRM ack`. The UI's
+  per-row "Trace" dialog renders this as a vertical timeline.
+- **Dream Lite dispatch.** `POST /api/memory/dream-lite/dispatch` creates
+  a task with `requiredCapability="dream"`; if a `dream`-capable arm
+  (e.g. `kannaka-prime`) is registered the existing dispatch path picks
+  it up. When no such arm is online, the route also runs the local
+  in-process Dream Lite compaction so the audit trail captures the
+  operator's intent. The response surfaces both — the UI shows a
+  long-running notice ("a real dream cycle can take 5+ minutes on a
+  bloated medium") and the returned task id flows over the existing
+  WebSocket so the Tasks page reflects progress live.
+- **Failure modes (explicit, no silent fallbacks).** When the NATS
+  client is `disabled` or `closed`, `publishAbsorb()` returns
+  `{delivered:false}` with a message like `NATS closed — absorb cannot
+  be published yet`; the operator action persists this on the row
+  (`absorb_state="failed"`, `last_absorb_error`) so the UI surfaces the
+  reason and the action becomes "Retry Absorb". HRM nacks land via
+  `recordAbsorbAck()` with the same shape.
+- **Supersedes Draft #9 + memory-adapter stub.** The HTTP-based
+  `pushToKannakaMemory(event)` no-op is replaced by `publishAbsorb()`;
+  a back-compat shim remains as a no-op so any out-of-tree caller still
+  loads cleanly. Draft #9 is now retired — its goal (mirror approved
+  events into kannaka-memory) is fully covered by this wave.
+- **Tests.** `artifacts/api-server/src/lib/__tests__/memory-adapter.test.ts`
+  drives the full loop with the in-memory NATS substrate: publish on
+  `KANNAKA.absorb`, ack-handler updates row to `absorbed`, nack flips
+  to `failed`, prune does not publish, strengthen does, and
+  `markLocalApproved` reverts a pending row.
+
 ### Wave 5 — Production deploy + auth hardening
 
 **Goal:** ninja-portal.com goes live.

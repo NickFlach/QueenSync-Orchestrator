@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AbsorbActionResult,
   AdapterEvent,
   AdapterHealth,
   AdapterPullResult,
@@ -27,14 +28,18 @@ import type {
   CreateTaskBody,
   DemoResult,
   DreamLiteBody,
+  DreamLiteDispatchResult,
   DreamLiteResult,
   EvaluateMemoryBody,
+  ExemplarDecisionBody,
+  ExemplarStats,
   HealthStatus,
   InjectSignalBody,
   ListMemoryParams,
   LogEntry,
   MemoryEvaluation,
   MemoryEvent,
+  MemoryTrace,
   ObservatoryConfig,
   ObservatoryState,
   OnboardArmBody,
@@ -1330,6 +1335,81 @@ export const useEvaluateMemory = <
 };
 
 /**
+ * @summary Counters for inbound HRM exemplar candidates.
+ */
+export const getGetExemplarStatsUrl = () => {
+  return `/api/memory/exemplars/stats`;
+};
+
+export const getExemplarStats = async (
+  options?: RequestInit,
+): Promise<ExemplarStats> => {
+  return customFetch<ExemplarStats>(getGetExemplarStatsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetExemplarStatsQueryKey = () => {
+  return [`/api/memory/exemplars/stats`] as const;
+};
+
+export const getGetExemplarStatsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getExemplarStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getExemplarStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetExemplarStatsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getExemplarStats>>
+  > = ({ signal }) => getExemplarStats({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getExemplarStats>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetExemplarStatsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getExemplarStats>>
+>;
+export type GetExemplarStatsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Counters for inbound HRM exemplar candidates.
+ */
+
+export function useGetExemplarStats<
+  TData = Awaited<ReturnType<typeof getExemplarStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getExemplarStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetExemplarStatsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Run Dream Lite compression over a window of recent approved memory events.
  */
 export const getCompressMemoryDreamLiteUrl = () => {
@@ -1414,6 +1494,454 @@ export const useCompressMemoryDreamLite = <
 > => {
   return useMutation(getCompressMemoryDreamLiteMutationOptions(options));
 };
+
+/**
+ * @summary Dispatch a real Dream cycle to the kannaka-prime arm (capability=dream).
+Falls back to the local in-process Dream Lite compaction when no
+dream-capable arm is registered. The kannaka-prime cycle can take
+5+ minutes on a bloated medium — the response includes the task id
+so the UI can subscribe to its progress via WebSocket.
+
+ */
+export const getDispatchDreamLiteUrl = () => {
+  return `/api/memory/dream-lite/dispatch`;
+};
+
+export const dispatchDreamLite = async (
+  dreamLiteBody?: DreamLiteBody,
+  options?: RequestInit,
+): Promise<DreamLiteDispatchResult> => {
+  return customFetch<DreamLiteDispatchResult>(getDispatchDreamLiteUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(dreamLiteBody),
+  });
+};
+
+export const getDispatchDreamLiteMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof dispatchDreamLite>>,
+    TError,
+    { data: BodyType<DreamLiteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof dispatchDreamLite>>,
+  TError,
+  { data: BodyType<DreamLiteBody> },
+  TContext
+> => {
+  const mutationKey = ["dispatchDreamLite"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof dispatchDreamLite>>,
+    { data: BodyType<DreamLiteBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return dispatchDreamLite(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DispatchDreamLiteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof dispatchDreamLite>>
+>;
+export type DispatchDreamLiteMutationBody = BodyType<DreamLiteBody>;
+export type DispatchDreamLiteMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Dispatch a real Dream cycle to the kannaka-prime arm (capability=dream).
+Falls back to the local in-process Dream Lite compaction when no
+dream-capable arm is registered. The kannaka-prime cycle can take
+5+ minutes on a bloated medium — the response includes the task id
+so the UI can subscribe to its progress via WebSocket.
+
+ */
+export const useDispatchDreamLite = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof dispatchDreamLite>>,
+    TError,
+    { data: BodyType<DreamLiteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof dispatchDreamLite>>,
+  TError,
+  { data: BodyType<DreamLiteBody> },
+  TContext
+> => {
+  return useMutation(getDispatchDreamLiteMutationOptions(options));
+};
+
+export const getLocalApproveMemoryUrl = (id: string) => {
+  return `/api/memory/${id}/local-approve`;
+};
+
+export const localApproveMemory = async (
+  id: string,
+  options?: RequestInit,
+): Promise<MemoryEvent> => {
+  return customFetch<MemoryEvent>(getLocalApproveMemoryUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getLocalApproveMemoryMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof localApproveMemory>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof localApproveMemory>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["localApproveMemory"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof localApproveMemory>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return localApproveMemory(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type LocalApproveMemoryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof localApproveMemory>>
+>;
+
+export type LocalApproveMemoryMutationError = ErrorType<void>;
+
+export const useLocalApproveMemory = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof localApproveMemory>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof localApproveMemory>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getLocalApproveMemoryMutationOptions(options));
+};
+
+/**
+ * @summary Operator action: publish the memory event on KANNAKA.absorb. Returns
+immediately after publish; HRM acks asynchronously on
+KANNAKA.absorb.ack and update absorb_state to absorbed/failed.
+
+ */
+export const getAbsorbMemoryUrl = (id: string) => {
+  return `/api/memory/${id}/absorb`;
+};
+
+export const absorbMemory = async (
+  id: string,
+  options?: RequestInit,
+): Promise<AbsorbActionResult> => {
+  return customFetch<AbsorbActionResult>(getAbsorbMemoryUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getAbsorbMemoryMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof absorbMemory>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof absorbMemory>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["absorbMemory"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof absorbMemory>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return absorbMemory(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AbsorbMemoryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof absorbMemory>>
+>;
+
+export type AbsorbMemoryMutationError = ErrorType<void>;
+
+/**
+ * @summary Operator action: publish the memory event on KANNAKA.absorb. Returns
+immediately after publish; HRM acks asynchronously on
+KANNAKA.absorb.ack and update absorb_state to absorbed/failed.
+
+ */
+export const useAbsorbMemory = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof absorbMemory>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof absorbMemory>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getAbsorbMemoryMutationOptions(options));
+};
+
+/**
+ * @summary Decide on an inbound HRM exemplar candidate. `strengthened` re-publishes
+on KANNAKA.absorb so the HRM weights are reinforced; `pruned` rejects
+the candidate locally (no publish).
+
+ */
+export const getDecideExemplarUrl = (id: string) => {
+  return `/api/memory/${id}/exemplar/decide`;
+};
+
+export const decideExemplar = async (
+  id: string,
+  exemplarDecisionBody: ExemplarDecisionBody,
+  options?: RequestInit,
+): Promise<AbsorbActionResult> => {
+  return customFetch<AbsorbActionResult>(getDecideExemplarUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(exemplarDecisionBody),
+  });
+};
+
+export const getDecideExemplarMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof decideExemplar>>,
+    TError,
+    { id: string; data: BodyType<ExemplarDecisionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof decideExemplar>>,
+  TError,
+  { id: string; data: BodyType<ExemplarDecisionBody> },
+  TContext
+> => {
+  const mutationKey = ["decideExemplar"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof decideExemplar>>,
+    { id: string; data: BodyType<ExemplarDecisionBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return decideExemplar(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DecideExemplarMutationResult = NonNullable<
+  Awaited<ReturnType<typeof decideExemplar>>
+>;
+export type DecideExemplarMutationBody = BodyType<ExemplarDecisionBody>;
+export type DecideExemplarMutationError = ErrorType<void>;
+
+/**
+ * @summary Decide on an inbound HRM exemplar candidate. `strengthened` re-publishes
+on KANNAKA.absorb so the HRM weights are reinforced; `pruned` rejects
+the candidate locally (no publish).
+
+ */
+export const useDecideExemplar = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof decideExemplar>>,
+    TError,
+    { id: string; data: BodyType<ExemplarDecisionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof decideExemplar>>,
+  TError,
+  { id: string; data: BodyType<ExemplarDecisionBody> },
+  TContext
+> => {
+  return useMutation(getDecideExemplarMutationOptions(options));
+};
+
+/**
+ * @summary End-to-end trace for a memory event: walks signal → resonance →
+arm response → memory candidate → absorb ack.
+
+ */
+export const getTraceMemoryUrl = (id: string) => {
+  return `/api/memory/${id}/trace`;
+};
+
+export const traceMemory = async (
+  id: string,
+  options?: RequestInit,
+): Promise<MemoryTrace> => {
+  return customFetch<MemoryTrace>(getTraceMemoryUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getTraceMemoryQueryKey = (id: string) => {
+  return [`/api/memory/${id}/trace`] as const;
+};
+
+export const getTraceMemoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof traceMemory>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof traceMemory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getTraceMemoryQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof traceMemory>>> = ({
+    signal,
+  }) => traceMemory(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof traceMemory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type TraceMemoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof traceMemory>>
+>;
+export type TraceMemoryQueryError = ErrorType<void>;
+
+/**
+ * @summary End-to-end trace for a memory event: walks signal → resonance →
+arm response → memory candidate → absorb ack.
+
+ */
+
+export function useTraceMemory<
+  TData = Awaited<ReturnType<typeof traceMemory>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof traceMemory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getTraceMemoryQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 export const getListLogsUrl = () => {
   return `/api/logs`;

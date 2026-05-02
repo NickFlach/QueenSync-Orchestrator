@@ -11,6 +11,7 @@ import {
   getGetSystemSummaryQueryKey,
   getGetObservatoryStateQueryKey,
   getGetObservatoryConfigQueryKey,
+  getHealthCheckQueryKey,
 } from "@workspace/api-client-react";
 
 export type WsStatus = "idle" | "connecting" | "open" | "closed";
@@ -57,6 +58,7 @@ const EVENT_TO_KEYS: Record<string, (() => readonly unknown[])[]> = {
     getGetSystemSummaryQueryKey,
     getListLogsQueryKey,
   ],
+  nats_state: [getHealthCheckQueryKey, getGetSystemSummaryQueryKey],
 };
 
 interface QueenSyncEvent {

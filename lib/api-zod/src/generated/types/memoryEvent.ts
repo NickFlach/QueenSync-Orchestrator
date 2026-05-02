@@ -5,7 +5,9 @@
  * QueenSync — Kannaka agent orchestration & resonance control plane
  * OpenAPI spec version: 0.2.0
  */
+import type { MemoryEventAbsorbState } from "./memoryEventAbsorbState";
 import type { MemoryEventDecision } from "./memoryEventDecision";
+import type { MemoryEventExemplarOutcome } from "./memoryEventExemplarOutcome";
 import type { MemoryEventMetadata } from "./memoryEventMetadata";
 import type { MemoryEventType } from "./memoryEventType";
 
@@ -31,5 +33,28 @@ export interface MemoryEvent {
   /** @nullable */
   sourceResonanceId?: string | null;
   metadata?: MemoryEventMetadata;
+  /** Wave 4 — HRM absorb lifecycle. `not_required` means the event is
+local-only and was never queued for kannaka-memory. `pending`
+means it was published on KANNAKA.absorb and is awaiting an
+ack. `absorbed` means HRM acked success. `failed` means publish
+errored or HRM nacked — the operator can retry.
+ */
+  absorbState: MemoryEventAbsorbState;
+  /** @nullable */
+  absorbStateUpdatedAt?: Date | null;
+  absorbAttempts?: number;
+  /** @nullable */
+  absorbedAt?: Date | null;
+  /** @nullable */
+  lastAbsorbError?: string | null;
+  /** @nullable */
+  idempotencyKey?: string | null;
+  /** True when the event arrived from KANNAKA.exemplars (HRM candidate). */
+  inboundExemplar: boolean;
+  /**
+   * Operator decision on an inbound exemplar; null = pending.
+   * @nullable
+   */
+  exemplarOutcome?: MemoryEventExemplarOutcome;
   createdAt: Date;
 }

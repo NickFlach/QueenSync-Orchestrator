@@ -5,6 +5,7 @@ import {
   signalsTable,
   resonanceFieldsTable,
   armsTable,
+  tasksTable,
 } from "@workspace/db";
 import {
   ALL_SUBSCRIBE_SUBJECTS,
@@ -17,8 +18,9 @@ import {
 import { logger } from "./logger";
 import { broadcast } from "./ws";
 import { autoLocalResonance } from "./resonance";
-import { evaluateMemory } from "./memory-gate";
+import { evaluateMemory, recordAbsorbAck } from "./memory-gate";
 import { recordLog } from "./log";
+import type { AbsorbAckPayload } from "./memory-adapter";
 
 // ─── Tag vocabulary (per ADR-002 Wave 2) ──────────────────────────────────
 const DREAM_TAGS = ["dream", "consciousness", "consolidation"];
@@ -151,16 +153,59 @@ async function handleExemplar(msg: NatsMessage): Promise<void> {
   const text = String(
     p["content"] ?? p["text"] ?? p["summary"] ?? `Exemplar from cluster ${cluster}`,
   );
+  // Wave 4: inbound exemplars land as `decision="pending"` candidates with
+  // `inbound_exemplar=true`. An operator decides on the Memory Gate page:
+  //   • Re-absorb  → strengthens; publishes back on KANNAKA.absorb.
+  //   • Reject     → prunes; no publish.
   await evaluateMemory({
     type: "signal",
     content: text,
+    forcedDecision: "pending",
+    inboundExemplar: true,
     metadata: {
       ...p,
       _kind: "exemplar",
       tags: EXEMPLAR_TAGS,
       _natsSubject: msg.subject,
+      hrmExemplarId: p["id"] ?? p["exemplarId"] ?? null,
     },
   });
+}
+
+async function handleAbsorbAck(msg: NatsMessage): Promise<void> {
+  const p = asObj(msg.data);
+  const status = String(p["status"] ?? "");
+  if (status !== "absorbed" && status !== "rejected" && status !== "failed") {
+    logger.warn(
+      { subject: msg.subject, status },
+      "absorb ack with unrecognised status; ignored",
+    );
+    return;
+  }
+  const ack: AbsorbAckPayload = {
+    status,
+    memoryId: typeof p["memoryId"] === "string" ? (p["memoryId"] as string) : undefined,
+    idempotencyKey:
+      typeof p["idempotencyKey"] === "string"
+        ? (p["idempotencyKey"] as string)
+        : undefined,
+    hrmId: typeof p["hrmId"] === "string" ? (p["hrmId"] as string) : undefined,
+    reason: typeof p["reason"] === "string" ? (p["reason"] as string) : undefined,
+  };
+  if (!ack.memoryId && !ack.idempotencyKey) {
+    logger.warn(
+      { subject: msg.subject },
+      "absorb ack missing memoryId and idempotencyKey; cannot route",
+    );
+    return;
+  }
+  const updated = await recordAbsorbAck(ack);
+  if (!updated) {
+    logger.warn(
+      { subject: msg.subject, ack },
+      "absorb ack did not match any local memory event",
+    );
+  }
 }
 
 async function handlePresence(msg: NatsMessage, kind: "join" | "leave"): Promise<void> {
@@ -216,11 +261,55 @@ async function handleDreamPhase(
   phase: "start" | "end",
 ): Promise<void> {
   const p = asObj(msg.data);
+  // Wave 4: queen.event.dream.start/end carry the dispatched `taskId`
+  // when the cycle was kicked off via /api/memory/dream-lite/dispatch.
+  // Update the task row + broadcast the matching WS event so the live
+  // progress panel on the Memory Gate page reflects real swarm progress.
+  const taskId =
+    typeof p["taskId"] === "string"
+      ? (p["taskId"] as string)
+      : typeof p["task_id"] === "string"
+        ? (p["task_id"] as string)
+        : null;
+  if (taskId) {
+    if (phase === "start") {
+      const [active] = await db
+        .update(tasksTable)
+        .set({ status: "active" })
+        .where(eq(tasksTable.id, taskId))
+        .returning();
+      if (active) broadcast({ type: "task_assigned", data: active });
+    } else {
+      const status =
+        typeof p["status"] === "string" ? (p["status"] as string) : "completed";
+      const result =
+        typeof p["result"] === "string"
+          ? (p["result"] as string)
+          : `Dream cycle ${phase}ed via ${msg.subject}`;
+      const isFailure = status === "failed" || status === "error";
+      const [done] = await db
+        .update(tasksTable)
+        .set({
+          status: isFailure ? "failed" : "completed",
+          result,
+        })
+        .where(eq(tasksTable.id, taskId))
+        .returning();
+      if (done) {
+        broadcast({
+          type: isFailure ? "task_failed" : "task_completed",
+          data: done,
+        });
+      }
+    }
+  }
   await recordLog({
     eventType: phase === "start" ? "dream_start" : "dream_end",
     source: "nats:queen",
-    summary: `Queen dream cycle ${phase === "start" ? "started" : "ended"}`,
-    metadata: { ...p, _natsSubject: msg.subject },
+    summary: `Queen dream cycle ${phase === "start" ? "started" : "ended"}${
+      taskId ? ` (task ${taskId})` : ""
+    }`,
+    metadata: { ...p, _natsSubject: msg.subject, taskId },
   });
 }
 
@@ -270,6 +359,7 @@ export async function startNatsBridge(
   );
   client.subscribe(SUBJECTS.REACTIONS, safe(SUBJECTS.REACTIONS, handleReaction));
   client.subscribe(SUBJECTS.EXEMPLARS, safe(SUBJECTS.EXEMPLARS, handleExemplar));
+  client.subscribe(SUBJECTS.ABSORB_ACK, safe(SUBJECTS.ABSORB_ACK, handleAbsorbAck));
   client.subscribe(
     SUBJECTS.QUEEN_DREAM_START,
     safe(SUBJECTS.QUEEN_DREAM_START, (m) => handleDreamPhase(m, "start")),

@@ -16,6 +16,22 @@ export const SUBJECTS = {
   CONSCIOUSNESS: "KANNAKA.consciousness",
   REACTIONS: "KANNAKA.reactions",
   EXEMPLARS: "KANNAKA.exemplars",
+  /**
+   * Wave 4: outbound Memory Gate → kannaka-memory absorb requests.
+   * Approved memory events the operator escalates with "Absorb to HRM"
+   * publish here with an idempotency key (the existing 24h dedupe hash).
+   */
+  ABSORB: "KANNAKA.absorb",
+  /** Wave 4: HRM acks for absorb attempts (success / rejection / failure). */
+  ABSORB_ACK: "KANNAKA.absorb.ack",
+  /**
+   * Wave 4: outbound Memory Gate → swarm dream-cycle dispatch. QueenSync
+   * publishes the operator-triggered "Dream Lite" intent here for
+   * kannaka-prime / the swarm to pick up. The swarm reports progress via
+   * `queen.event.dream.start` / `queen.event.dream.end`, both of which
+   * carry the dispatched `taskId` so QueenSync can correlate.
+   */
+  DREAM_DISPATCH: "KANNAKA.dream.dispatch",
   QUEEN_DREAM_START: "queen.event.dream.start",
   QUEEN_DREAM_END: "queen.event.dream.end",
   QUEEN_JOIN: "queen.event.join",
@@ -29,6 +45,7 @@ export const ALL_SUBSCRIBE_SUBJECTS: readonly string[] = [
   SUBJECTS.CONSCIOUSNESS,
   SUBJECTS.REACTIONS,
   SUBJECTS.EXEMPLARS,
+  SUBJECTS.ABSORB_ACK,
   SUBJECTS.QUEEN_DREAM_START,
   SUBJECTS.QUEEN_DREAM_END,
   SUBJECTS.QUEEN_JOIN,

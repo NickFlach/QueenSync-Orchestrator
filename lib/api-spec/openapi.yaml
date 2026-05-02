@@ -250,6 +250,10 @@ paths:
           in: query
           required: false
           schema: { type: boolean, default: false }
+        - name: inboundExemplarsOnly
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
       responses:
         "200":
           description: OK
@@ -275,6 +279,18 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/MemoryEvaluation" }
 
+  /memory/exemplars/stats:
+    get:
+      operationId: getExemplarStats
+      tags: [memory]
+      summary: Counters for inbound HRM exemplar candidates.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExemplarStats" }
+
   /memory/dream-lite:
     post:
       operationId: compressMemoryDreamLite
@@ -291,6 +307,116 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/DreamLiteResult" }
+
+  /memory/dream-lite/dispatch:
+    post:
+      operationId: dispatchDreamLite
+      tags: [memory]
+      summary: |
+        Dispatch a real Dream cycle to the kannaka-prime arm (capability=dream).
+        Falls back to the local in-process Dream Lite compaction when no
+        dream-capable arm is registered. The kannaka-prime cycle can take
+        5+ minutes on a bloated medium — the response includes the task id
+        so the UI can subscribe to its progress via WebSocket.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DreamLiteBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DreamLiteDispatchResult" }
+
+  /memory/{id}/local-approve:
+    post:
+      operationId: localApproveMemory
+      tags: [memory]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemoryEvent" }
+        "404":
+          description: Not found
+
+  /memory/{id}/absorb:
+    post:
+      operationId: absorbMemory
+      tags: [memory]
+      summary: |
+        Operator action: publish the memory event on KANNAKA.absorb. Returns
+        immediately after publish; HRM acks asynchronously on
+        KANNAKA.absorb.ack and update absorb_state to absorbed/failed.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AbsorbActionResult" }
+        "404":
+          description: Not found
+
+  /memory/{id}/exemplar/decide:
+    post:
+      operationId: decideExemplar
+      tags: [memory]
+      summary: |
+        Decide on an inbound HRM exemplar candidate. `strengthened` re-publishes
+        on KANNAKA.absorb so the HRM weights are reinforced; `pruned` rejects
+        the candidate locally (no publish).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExemplarDecisionBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AbsorbActionResult" }
+        "404":
+          description: Not found
+
+  /memory/{id}/trace:
+    get:
+      operationId: traceMemory
+      tags: [memory]
+      summary: |
+        End-to-end trace for a memory event: walks signal → resonance →
+        arm response → memory candidate → absorb ack.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemoryTrace" }
+        "404":
+          description: Not found
 
   /logs:
     get:
@@ -838,6 +964,8 @@ components:
           importance,
           decision,
           compacted,
+          absorbState,
+          inboundExemplar,
           createdAt,
         ]
       properties:
@@ -862,7 +990,7 @@ components:
         importance: { type: number }
         decision:
           type: string
-          enum: [approved, rejected, duplicate]
+          enum: [approved, rejected, duplicate, pending]
         reason: { type: ["string", "null"] }
         compacted: { type: boolean }
         compactedIntoId: { type: ["string", "null"] }
@@ -872,6 +1000,27 @@ components:
         metadata:
           type: object
           additionalProperties: true
+        absorbState:
+          type: string
+          enum: [not_required, pending, absorbed, failed]
+          description: |
+            Wave 4 — HRM absorb lifecycle. `not_required` means the event is
+            local-only and was never queued for kannaka-memory. `pending`
+            means it was published on KANNAKA.absorb and is awaiting an
+            ack. `absorbed` means HRM acked success. `failed` means publish
+            errored or HRM nacked — the operator can retry.
+        absorbStateUpdatedAt: { type: ["string", "null"], format: date-time }
+        absorbAttempts: { type: integer, default: 0 }
+        absorbedAt: { type: ["string", "null"], format: date-time }
+        lastAbsorbError: { type: ["string", "null"] }
+        idempotencyKey: { type: ["string", "null"] }
+        inboundExemplar:
+          type: boolean
+          description: True when the event arrived from KANNAKA.exemplars (HRM candidate).
+        exemplarOutcome:
+          type: ["string", "null"]
+          enum: [strengthened, pruned, null]
+          description: Operator decision on an inbound exemplar; null = pending.
         createdAt: { type: string, format: date-time }
 
     EvaluateMemoryBody:
@@ -901,12 +1050,100 @@ components:
       properties:
         decision:
           type: string
-          enum: [approved, rejected, duplicate]
+          enum: [approved, rejected, duplicate, pending]
         importance: { type: number }
         event:
           oneOf:
             - $ref: "#/components/schemas/MemoryEvent"
             - type: "null"
+
+    ExemplarStats:
+      type: object
+      required: [strengthened, pruned, pending, total]
+      properties:
+        strengthened: { type: integer }
+        pruned: { type: integer }
+        pending: { type: integer }
+        total: { type: integer }
+
+    ExemplarDecisionBody:
+      type: object
+      required: [outcome]
+      properties:
+        outcome:
+          type: string
+          enum: [strengthened, pruned]
+
+    AbsorbActionResult:
+      type: object
+      required: [event, publish]
+      properties:
+        event:
+          oneOf:
+            - $ref: "#/components/schemas/MemoryEvent"
+            - type: "null"
+        publish:
+          type: object
+          required: [delivered, message]
+          properties:
+            delivered: { type: boolean }
+            message: { type: string }
+
+    DreamLiteDispatchResult:
+      type: object
+      required: [task, note]
+      properties:
+        task: { $ref: "#/components/schemas/Task" }
+        assignedArmId: { type: ["string", "null"] }
+        note: { type: string }
+        localFallback:
+          oneOf:
+            - $ref: "#/components/schemas/DreamLiteResult"
+            - type: "null"
+
+    MemoryTraceStep:
+      type: object
+      required: [kind, id, at, title, detail]
+      properties:
+        kind:
+          type: string
+          enum:
+            - signal
+            - task
+            - resonance
+            - resonance_response
+            - memory
+            - absorb_event
+            - log
+        id: { type: string }
+        at: { type: string, format: date-time }
+        title: { type: string }
+        detail: { type: string }
+        metadata:
+          type: object
+          additionalProperties: true
+
+    MemoryTrace:
+      type: object
+      required: [memoryId, summary, steps]
+      properties:
+        memoryId: { type: string }
+        summary:
+          type: object
+          required: [hasSignal, hasTask, hasResonance, responseCount, absorbState]
+          properties:
+            hasSignal: { type: boolean }
+            hasTask: { type: boolean }
+            hasResonance: { type: boolean }
+            responseCount: { type: integer }
+            absorbState:
+              type: string
+              enum: [not_required, pending, absorbed, failed]
+            absorbedAt: { type: ["string", "null"], format: date-time }
+            idempotencyKey: { type: ["string", "null"] }
+        steps:
+          type: array
+          items: { $ref: "#/components/schemas/MemoryTraceStep" }
 
     LogEntry:
       type: object
@@ -925,7 +1162,14 @@ components:
             - task_completed
             - task_failed
             - memory_approved
+            - memory_pending
             - memory_rejected
+            - memory_local_approved
+            - memory_absorb_published
+            - memory_absorb_failed
+            - memory_absorbed
+            - memory_absorb_nack
+            - memory_exemplar_pruned
             - resonance_created
             - resonance_response
             - resonance_resolved

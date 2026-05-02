@@ -358,9 +358,41 @@ export const MemoryEventDecision = {
   approved: "approved",
   rejected: "rejected",
   duplicate: "duplicate",
+  pending: "pending",
 } as const;
 
 export type MemoryEventMetadata = { [key: string]: unknown };
+
+/**
+ * Wave 4 — HRM absorb lifecycle. `not_required` means the event is
+local-only and was never queued for kannaka-memory. `pending`
+means it was published on KANNAKA.absorb and is awaiting an
+ack. `absorbed` means HRM acked success. `failed` means publish
+errored or HRM nacked — the operator can retry.
+
+ */
+export type MemoryEventAbsorbState =
+  (typeof MemoryEventAbsorbState)[keyof typeof MemoryEventAbsorbState];
+
+export const MemoryEventAbsorbState = {
+  not_required: "not_required",
+  pending: "pending",
+  absorbed: "absorbed",
+  failed: "failed",
+} as const;
+
+/**
+ * Operator decision on an inbound exemplar; null = pending.
+ * @nullable
+ */
+export type MemoryEventExemplarOutcome =
+  | (typeof MemoryEventExemplarOutcome)[keyof typeof MemoryEventExemplarOutcome]
+  | null;
+
+export const MemoryEventExemplarOutcome = {
+  strengthened: "strengthened",
+  pruned: "pruned",
+} as const;
 
 export interface MemoryEvent {
   id: string;
@@ -384,6 +416,29 @@ export interface MemoryEvent {
   /** @nullable */
   sourceResonanceId?: string | null;
   metadata?: MemoryEventMetadata;
+  /** Wave 4 — HRM absorb lifecycle. `not_required` means the event is
+local-only and was never queued for kannaka-memory. `pending`
+means it was published on KANNAKA.absorb and is awaiting an
+ack. `absorbed` means HRM acked success. `failed` means publish
+errored or HRM nacked — the operator can retry.
+ */
+  absorbState: MemoryEventAbsorbState;
+  /** @nullable */
+  absorbStateUpdatedAt?: string | null;
+  absorbAttempts?: number;
+  /** @nullable */
+  absorbedAt?: string | null;
+  /** @nullable */
+  lastAbsorbError?: string | null;
+  /** @nullable */
+  idempotencyKey?: string | null;
+  /** True when the event arrived from KANNAKA.exemplars (HRM candidate). */
+  inboundExemplar: boolean;
+  /**
+   * Operator decision on an inbound exemplar; null = pending.
+   * @nullable
+   */
+  exemplarOutcome?: MemoryEventExemplarOutcome;
   createdAt: string;
 }
 
@@ -420,12 +475,110 @@ export const MemoryEvaluationDecision = {
   approved: "approved",
   rejected: "rejected",
   duplicate: "duplicate",
+  pending: "pending",
 } as const;
 
 export interface MemoryEvaluation {
   decision: MemoryEvaluationDecision;
   importance: number;
   event: MemoryEvent | null;
+}
+
+export interface ExemplarStats {
+  strengthened: number;
+  pruned: number;
+  pending: number;
+  total: number;
+}
+
+export type ExemplarDecisionBodyOutcome =
+  (typeof ExemplarDecisionBodyOutcome)[keyof typeof ExemplarDecisionBodyOutcome];
+
+export const ExemplarDecisionBodyOutcome = {
+  strengthened: "strengthened",
+  pruned: "pruned",
+} as const;
+
+export interface ExemplarDecisionBody {
+  outcome: ExemplarDecisionBodyOutcome;
+}
+
+export type AbsorbActionResultPublish = {
+  delivered: boolean;
+  message: string;
+};
+
+export interface AbsorbActionResult {
+  event: MemoryEvent | null;
+  publish: AbsorbActionResultPublish;
+}
+
+export interface DreamLiteResult {
+  compactedCount: number;
+  windowMinutes: number;
+  message: string;
+  compressionEvent?: MemoryEvent | null;
+  compactedIds?: string[];
+}
+
+export interface DreamLiteDispatchResult {
+  task: Task;
+  /** @nullable */
+  assignedArmId?: string | null;
+  note: string;
+  localFallback?: DreamLiteResult | null;
+}
+
+export type MemoryTraceStepKind =
+  (typeof MemoryTraceStepKind)[keyof typeof MemoryTraceStepKind];
+
+export const MemoryTraceStepKind = {
+  signal: "signal",
+  task: "task",
+  resonance: "resonance",
+  resonance_response: "resonance_response",
+  memory: "memory",
+  absorb_event: "absorb_event",
+  log: "log",
+} as const;
+
+export type MemoryTraceStepMetadata = { [key: string]: unknown };
+
+export interface MemoryTraceStep {
+  kind: MemoryTraceStepKind;
+  id: string;
+  at: string;
+  title: string;
+  detail: string;
+  metadata?: MemoryTraceStepMetadata;
+}
+
+export type MemoryTraceSummaryAbsorbState =
+  (typeof MemoryTraceSummaryAbsorbState)[keyof typeof MemoryTraceSummaryAbsorbState];
+
+export const MemoryTraceSummaryAbsorbState = {
+  not_required: "not_required",
+  pending: "pending",
+  absorbed: "absorbed",
+  failed: "failed",
+} as const;
+
+export type MemoryTraceSummary = {
+  hasSignal: boolean;
+  hasTask: boolean;
+  hasResonance: boolean;
+  responseCount: number;
+  absorbState: MemoryTraceSummaryAbsorbState;
+  /** @nullable */
+  absorbedAt?: string | null;
+  /** @nullable */
+  idempotencyKey?: string | null;
+};
+
+export interface MemoryTrace {
+  memoryId: string;
+  summary: MemoryTraceSummary;
+  steps: MemoryTraceStep[];
 }
 
 export type LogEntryEventType =
@@ -441,7 +594,14 @@ export const LogEntryEventType = {
   task_completed: "task_completed",
   task_failed: "task_failed",
   memory_approved: "memory_approved",
+  memory_pending: "memory_pending",
   memory_rejected: "memory_rejected",
+  memory_local_approved: "memory_local_approved",
+  memory_absorb_published: "memory_absorb_published",
+  memory_absorb_failed: "memory_absorb_failed",
+  memory_absorbed: "memory_absorbed",
+  memory_absorb_nack: "memory_absorb_nack",
+  memory_exemplar_pruned: "memory_exemplar_pruned",
   resonance_created: "resonance_created",
   resonance_response: "resonance_response",
   resonance_resolved: "resonance_resolved",
@@ -690,14 +850,6 @@ export interface DreamLiteBody {
   windowMinutes?: number | null;
 }
 
-export interface DreamLiteResult {
-  compactedCount: number;
-  windowMinutes: number;
-  message: string;
-  compressionEvent?: MemoryEvent | null;
-  compactedIds?: string[];
-}
-
 export interface ObservatoryConsciousness {
   level: string;
   phi: number;
@@ -763,6 +915,7 @@ export interface ObservatoryConfig {
 export type ListMemoryParams = {
   includeCompacted?: boolean;
   includeRejected?: boolean;
+  inboundExemplarsOnly?: boolean;
 };
 
 export type PrivilegedDispatchRecentStatsParams = {

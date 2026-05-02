@@ -5,6 +5,7 @@ import {
   doublePrecision,
   jsonb,
   boolean,
+  integer,
 } from "drizzle-orm/pg-core";
 
 export const memoryEventsTable = pgTable("memory_events", {
@@ -25,6 +26,29 @@ export const memoryEventsTable = pgTable("memory_events", {
   sourceResonanceId: text("source_resonance_id"),
   contentHash: text("content_hash").notNull(),
   metadata: jsonb("metadata").notNull().default({}),
+  // ── Wave 4: HRM absorb bridge ──────────────────────────────────────────
+  // absorb_state values:
+  //   "not_required" — local-only approval; never sent to HRM
+  //   "pending"      — published on KANNAKA.absorb, awaiting ack
+  //   "absorbed"     — HRM acked via KANNAKA.absorb.ack
+  //   "failed"       — publish errored OR HRM nacked; operator can retry
+  absorbState: text("absorb_state").notNull().default("not_required"),
+  absorbStateUpdatedAt: timestamp("absorb_state_updated_at", {
+    withTimezone: true,
+  }),
+  absorbAttempts: integer("absorb_attempts").notNull().default(0),
+  absorbedAt: timestamp("absorbed_at", { withTimezone: true }),
+  lastAbsorbError: text("last_absorb_error"),
+  // The idempotency key sent on KANNAKA.absorb. Today this is the same as
+  // contentHash (the existing 24h dedupe hash) but kept as a separate column
+  // so the bridge can evolve the key derivation without disturbing the
+  // local dedupe semantics.
+  idempotencyKey: text("idempotency_key"),
+  // Inbound exemplars that arrive on KANNAKA.exemplars are persisted as
+  // candidate events with `inboundExemplar=true` — an operator decides
+  // whether to "Re-absorb" (strengthen) or "Reject" (prune).
+  inboundExemplar: boolean("inbound_exemplar").notNull().default(false),
+  exemplarOutcome: text("exemplar_outcome"), // "strengthened" | "pruned" | null
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

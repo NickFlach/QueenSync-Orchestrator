@@ -8,7 +8,6 @@ import {
 } from "@workspace/db";
 import { recordLog } from "./log";
 import { broadcast } from "./ws";
-import { pushToKannakaMemory } from "./memory-adapter";
 
 export interface DreamLiteCompressionResult {
   compactedCount: number;
@@ -67,6 +66,13 @@ function aggregateTags(rows: MemoryEvent[]): string[] {
 export async function runDreamLiteCompression(options: {
   windowMinutes?: number;
   trigger?: string;
+  /**
+   * Wave 4 — when the compaction is the local fallback for a dispatched
+   * Dream Lite task, thread the dispatched task id through every log /
+   * memory event so the UI's live progress panel (filtered by
+   * `metadata.taskId`) can render the fallback's progress.
+   */
+  taskId?: string;
 }): Promise<DreamLiteCompressionResult> {
   const windowMinutes = Math.max(
     1,
@@ -98,6 +104,7 @@ export async function runDreamLiteCompression(options: {
         windowMinutes,
         compactedCount: 0,
         trigger: options.trigger ?? "unknown",
+        taskId: options.taskId ?? null,
       },
     });
     return {
@@ -140,6 +147,7 @@ export async function runDreamLiteCompression(options: {
       compactedIds: ids,
       tagsAggregated: tags,
       trigger: options.trigger ?? "unknown",
+      taskId: options.taskId ?? null,
     },
   };
 
@@ -171,10 +179,13 @@ export async function runDreamLiteCompression(options: {
       compressionId: compressionRow.id,
       compactedIds: ids,
       trigger: options.trigger ?? "unknown",
+      taskId: options.taskId ?? null,
     },
   });
 
-  await pushToKannakaMemory(compressionRow);
+  // Wave 4: dream-lite compression rows are local-only by default.
+  // Operators can escalate them to HRM with the per-row "Absorb to HRM"
+  // action on the Memory Gate page.
 
   return {
     compactedCount: rows.length,

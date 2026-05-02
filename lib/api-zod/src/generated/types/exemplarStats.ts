@@ -6,8 +6,9 @@
  * OpenAPI spec version: 0.2.0
  */
 
-export type ListMemoryParams = {
-  includeCompacted?: boolean;
-  includeRejected?: boolean;
-  inboundExemplarsOnly?: boolean;
-};
+export interface ExemplarStats {
+  strengthened: number;
+  pruned: number;
+  pending: number;
+  total: number;
+}

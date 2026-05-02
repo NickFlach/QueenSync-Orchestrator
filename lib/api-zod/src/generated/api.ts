@@ -368,6 +368,7 @@ export const InjectSignalBody = zod.object({
 
 export const listMemoryQueryIncludeCompactedDefault = false;
 export const listMemoryQueryIncludeRejectedDefault = false;
+export const listMemoryQueryInboundExemplarsOnlyDefault = false;
 
 export const ListMemoryQueryParams = zod.object({
   includeCompacted: zod.coerce
@@ -376,7 +377,12 @@ export const ListMemoryQueryParams = zod.object({
   includeRejected: zod.coerce
     .boolean()
     .default(listMemoryQueryIncludeRejectedDefault),
+  inboundExemplarsOnly: zod.coerce
+    .boolean()
+    .default(listMemoryQueryInboundExemplarsOnlyDefault),
 });
+
+export const listMemoryResponseAbsorbAttemptsDefault = 0;
 
 export const ListMemoryResponseItem = zod.object({
   id: zod.string(),
@@ -395,7 +401,7 @@ export const ListMemoryResponseItem = zod.object({
   summary: zod.string(),
   sourceAttribution: zod.string(),
   importance: zod.number(),
-  decision: zod.enum(["approved", "rejected", "duplicate"]),
+  decision: zod.enum(["approved", "rejected", "duplicate", "pending"]),
   reason: zod.string().nullish(),
   compacted: zod.boolean(),
   compactedIntoId: zod.string().nullish(),
@@ -403,6 +409,29 @@ export const ListMemoryResponseItem = zod.object({
   sourceTaskId: zod.string().nullish(),
   sourceResonanceId: zod.string().nullish(),
   metadata: zod.record(zod.string(), zod.unknown()).optional(),
+  absorbState: zod
+    .enum(["not_required", "pending", "absorbed", "failed"])
+    .describe(
+      "Wave 4 — HRM absorb lifecycle. `not_required` means the event is\nlocal-only and was never queued for kannaka-memory. `pending`\nmeans it was published on KANNAKA.absorb and is awaiting an\nack. `absorbed` means HRM acked success. `failed` means publish\nerrored or HRM nacked — the operator can retry.\n",
+    ),
+  absorbStateUpdatedAt: zod.coerce.date().nullish(),
+  absorbAttempts: zod.number().default(listMemoryResponseAbsorbAttemptsDefault),
+  absorbedAt: zod.coerce.date().nullish(),
+  lastAbsorbError: zod.string().nullish(),
+  idempotencyKey: zod.string().nullish(),
+  inboundExemplar: zod
+    .boolean()
+    .describe(
+      "True when the event arrived from KANNAKA.exemplars (HRM candidate).",
+    ),
+  exemplarOutcome: zod
+    .union([
+      zod.literal("strengthened"),
+      zod.literal("pruned"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe("Operator decision on an inbound exemplar; null = pending."),
   createdAt: zod.coerce.date(),
 });
 export const ListMemoryResponse = zod.array(ListMemoryResponseItem);
@@ -423,8 +452,10 @@ export const EvaluateMemoryBody = zod.object({
   metadata: zod.record(zod.string(), zod.unknown()).optional(),
 });
 
+export const evaluateMemoryResponseEventOneAbsorbAttemptsDefault = 0;
+
 export const EvaluateMemoryResponse = zod.object({
-  decision: zod.enum(["approved", "rejected", "duplicate"]),
+  decision: zod.enum(["approved", "rejected", "duplicate", "pending"]),
   importance: zod.number(),
   event: zod.union([
     zod.object({
@@ -444,7 +475,7 @@ export const EvaluateMemoryResponse = zod.object({
       summary: zod.string(),
       sourceAttribution: zod.string(),
       importance: zod.number(),
-      decision: zod.enum(["approved", "rejected", "duplicate"]),
+      decision: zod.enum(["approved", "rejected", "duplicate", "pending"]),
       reason: zod.string().nullish(),
       compacted: zod.boolean(),
       compactedIntoId: zod.string().nullish(),
@@ -452,10 +483,45 @@ export const EvaluateMemoryResponse = zod.object({
       sourceTaskId: zod.string().nullish(),
       sourceResonanceId: zod.string().nullish(),
       metadata: zod.record(zod.string(), zod.unknown()).optional(),
+      absorbState: zod
+        .enum(["not_required", "pending", "absorbed", "failed"])
+        .describe(
+          "Wave 4 — HRM absorb lifecycle. `not_required` means the event is\nlocal-only and was never queued for kannaka-memory. `pending`\nmeans it was published on KANNAKA.absorb and is awaiting an\nack. `absorbed` means HRM acked success. `failed` means publish\nerrored or HRM nacked — the operator can retry.\n",
+        ),
+      absorbStateUpdatedAt: zod.coerce.date().nullish(),
+      absorbAttempts: zod
+        .number()
+        .default(evaluateMemoryResponseEventOneAbsorbAttemptsDefault),
+      absorbedAt: zod.coerce.date().nullish(),
+      lastAbsorbError: zod.string().nullish(),
+      idempotencyKey: zod.string().nullish(),
+      inboundExemplar: zod
+        .boolean()
+        .describe(
+          "True when the event arrived from KANNAKA.exemplars (HRM candidate).",
+        ),
+      exemplarOutcome: zod
+        .union([
+          zod.literal("strengthened"),
+          zod.literal("pruned"),
+          zod.literal(null),
+        ])
+        .nullish()
+        .describe("Operator decision on an inbound exemplar; null = pending."),
       createdAt: zod.coerce.date(),
     }),
     zod.null(),
   ]),
+});
+
+/**
+ * @summary Counters for inbound HRM exemplar candidates.
+ */
+export const GetExemplarStatsResponse = zod.object({
+  strengthened: zod.number(),
+  pruned: zod.number(),
+  pending: zod.number(),
+  total: zod.number(),
 });
 
 /**
@@ -464,6 +530,8 @@ export const EvaluateMemoryResponse = zod.object({
 export const CompressMemoryDreamLiteBody = zod.object({
   windowMinutes: zod.number().nullish(),
 });
+
+export const compressMemoryDreamLiteResponseCompressionEventOneAbsorbAttemptsDefault = 0;
 
 export const CompressMemoryDreamLiteResponse = zod.object({
   compactedCount: zod.number(),
@@ -488,7 +556,7 @@ export const CompressMemoryDreamLiteResponse = zod.object({
         summary: zod.string(),
         sourceAttribution: zod.string(),
         importance: zod.number(),
-        decision: zod.enum(["approved", "rejected", "duplicate"]),
+        decision: zod.enum(["approved", "rejected", "duplicate", "pending"]),
         reason: zod.string().nullish(),
         compacted: zod.boolean(),
         compactedIntoId: zod.string().nullish(),
@@ -496,12 +564,403 @@ export const CompressMemoryDreamLiteResponse = zod.object({
         sourceTaskId: zod.string().nullish(),
         sourceResonanceId: zod.string().nullish(),
         metadata: zod.record(zod.string(), zod.unknown()).optional(),
+        absorbState: zod
+          .enum(["not_required", "pending", "absorbed", "failed"])
+          .describe(
+            "Wave 4 — HRM absorb lifecycle. `not_required` means the event is\nlocal-only and was never queued for kannaka-memory. `pending`\nmeans it was published on KANNAKA.absorb and is awaiting an\nack. `absorbed` means HRM acked success. `failed` means publish\nerrored or HRM nacked — the operator can retry.\n",
+          ),
+        absorbStateUpdatedAt: zod.coerce.date().nullish(),
+        absorbAttempts: zod
+          .number()
+          .default(
+            compressMemoryDreamLiteResponseCompressionEventOneAbsorbAttemptsDefault,
+          ),
+        absorbedAt: zod.coerce.date().nullish(),
+        lastAbsorbError: zod.string().nullish(),
+        idempotencyKey: zod.string().nullish(),
+        inboundExemplar: zod
+          .boolean()
+          .describe(
+            "True when the event arrived from KANNAKA.exemplars (HRM candidate).",
+          ),
+        exemplarOutcome: zod
+          .union([
+            zod.literal("strengthened"),
+            zod.literal("pruned"),
+            zod.literal(null),
+          ])
+          .nullish()
+          .describe(
+            "Operator decision on an inbound exemplar; null = pending.",
+          ),
         createdAt: zod.coerce.date(),
       }),
       zod.null(),
     ])
     .optional(),
   compactedIds: zod.array(zod.string()).optional(),
+});
+
+/**
+ * @summary Dispatch a real Dream cycle to the kannaka-prime arm (capability=dream).
+Falls back to the local in-process Dream Lite compaction when no
+dream-capable arm is registered. The kannaka-prime cycle can take
+5+ minutes on a bloated medium — the response includes the task id
+so the UI can subscribe to its progress via WebSocket.
+
+ */
+export const DispatchDreamLiteBody = zod.object({
+  windowMinutes: zod.number().nullish(),
+});
+
+export const dispatchDreamLiteResponseLocalFallbackOneCompressionEventOneAbsorbAttemptsDefault = 0;
+
+export const DispatchDreamLiteResponse = zod.object({
+  task: zod.object({
+    id: zod.string(),
+    intent: zod.string(),
+    requiredCapability: zod.string(),
+    priority: zod.number(),
+    source: zod.string(),
+    context: zod.record(zod.string(), zod.unknown()).optional(),
+    status: zod.enum(["pending", "active", "completed", "failed"]),
+    assignedArmId: zod.string().nullish(),
+    result: zod.string().nullish(),
+    error: zod.string().nullish(),
+    retryCount: zod.number().optional(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+  assignedArmId: zod.string().nullish(),
+  note: zod.string(),
+  localFallback: zod
+    .union([
+      zod.object({
+        compactedCount: zod.number(),
+        windowMinutes: zod.number(),
+        message: zod.string(),
+        compressionEvent: zod
+          .union([
+            zod.object({
+              id: zod.string(),
+              type: zod.enum([
+                "agent_output",
+                "signal",
+                "decision",
+                "artifact",
+                "system_event",
+                "resonance_event",
+                "dream_lite_compression",
+              ]),
+              tag: zod.string(),
+              tags: zod.array(zod.string()),
+              content: zod.string(),
+              summary: zod.string(),
+              sourceAttribution: zod.string(),
+              importance: zod.number(),
+              decision: zod.enum([
+                "approved",
+                "rejected",
+                "duplicate",
+                "pending",
+              ]),
+              reason: zod.string().nullish(),
+              compacted: zod.boolean(),
+              compactedIntoId: zod.string().nullish(),
+              agentId: zod.string().nullish(),
+              sourceTaskId: zod.string().nullish(),
+              sourceResonanceId: zod.string().nullish(),
+              metadata: zod.record(zod.string(), zod.unknown()).optional(),
+              absorbState: zod
+                .enum(["not_required", "pending", "absorbed", "failed"])
+                .describe(
+                  "Wave 4 — HRM absorb lifecycle. `not_required` means the event is\nlocal-only and was never queued for kannaka-memory. `pending`\nmeans it was published on KANNAKA.absorb and is awaiting an\nack. `absorbed` means HRM acked success. `failed` means publish\nerrored or HRM nacked — the operator can retry.\n",
+                ),
+              absorbStateUpdatedAt: zod.coerce.date().nullish(),
+              absorbAttempts: zod
+                .number()
+                .default(
+                  dispatchDreamLiteResponseLocalFallbackOneCompressionEventOneAbsorbAttemptsDefault,
+                ),
+              absorbedAt: zod.coerce.date().nullish(),
+              lastAbsorbError: zod.string().nullish(),
+              idempotencyKey: zod.string().nullish(),
+              inboundExemplar: zod
+                .boolean()
+                .describe(
+                  "True when the event arrived from KANNAKA.exemplars (HRM candidate).",
+                ),
+              exemplarOutcome: zod
+                .union([
+                  zod.literal("strengthened"),
+                  zod.literal("pruned"),
+                  zod.literal(null),
+                ])
+                .nullish()
+                .describe(
+                  "Operator decision on an inbound exemplar; null = pending.",
+                ),
+              createdAt: zod.coerce.date(),
+            }),
+            zod.null(),
+          ])
+          .optional(),
+        compactedIds: zod.array(zod.string()).optional(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+});
+
+export const LocalApproveMemoryParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const localApproveMemoryResponseAbsorbAttemptsDefault = 0;
+
+export const LocalApproveMemoryResponse = zod.object({
+  id: zod.string(),
+  type: zod.enum([
+    "agent_output",
+    "signal",
+    "decision",
+    "artifact",
+    "system_event",
+    "resonance_event",
+    "dream_lite_compression",
+  ]),
+  tag: zod.string(),
+  tags: zod.array(zod.string()),
+  content: zod.string(),
+  summary: zod.string(),
+  sourceAttribution: zod.string(),
+  importance: zod.number(),
+  decision: zod.enum(["approved", "rejected", "duplicate", "pending"]),
+  reason: zod.string().nullish(),
+  compacted: zod.boolean(),
+  compactedIntoId: zod.string().nullish(),
+  agentId: zod.string().nullish(),
+  sourceTaskId: zod.string().nullish(),
+  sourceResonanceId: zod.string().nullish(),
+  metadata: zod.record(zod.string(), zod.unknown()).optional(),
+  absorbState: zod
+    .enum(["not_required", "pending", "absorbed", "failed"])
+    .describe(
+      "Wave 4 — HRM absorb lifecycle. `not_required` means the event is\nlocal-only and was never queued for kannaka-memory. `pending`\nmeans it was published on KANNAKA.absorb and is awaiting an\nack. `absorbed` means HRM acked success. `failed` means publish\nerrored or HRM nacked — the operator can retry.\n",
+    ),
+  absorbStateUpdatedAt: zod.coerce.date().nullish(),
+  absorbAttempts: zod
+    .number()
+    .default(localApproveMemoryResponseAbsorbAttemptsDefault),
+  absorbedAt: zod.coerce.date().nullish(),
+  lastAbsorbError: zod.string().nullish(),
+  idempotencyKey: zod.string().nullish(),
+  inboundExemplar: zod
+    .boolean()
+    .describe(
+      "True when the event arrived from KANNAKA.exemplars (HRM candidate).",
+    ),
+  exemplarOutcome: zod
+    .union([
+      zod.literal("strengthened"),
+      zod.literal("pruned"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe("Operator decision on an inbound exemplar; null = pending."),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Operator action: publish the memory event on KANNAKA.absorb. Returns
+immediately after publish; HRM acks asynchronously on
+KANNAKA.absorb.ack and update absorb_state to absorbed/failed.
+
+ */
+export const AbsorbMemoryParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const absorbMemoryResponseEventOneAbsorbAttemptsDefault = 0;
+
+export const AbsorbMemoryResponse = zod.object({
+  event: zod.union([
+    zod.object({
+      id: zod.string(),
+      type: zod.enum([
+        "agent_output",
+        "signal",
+        "decision",
+        "artifact",
+        "system_event",
+        "resonance_event",
+        "dream_lite_compression",
+      ]),
+      tag: zod.string(),
+      tags: zod.array(zod.string()),
+      content: zod.string(),
+      summary: zod.string(),
+      sourceAttribution: zod.string(),
+      importance: zod.number(),
+      decision: zod.enum(["approved", "rejected", "duplicate", "pending"]),
+      reason: zod.string().nullish(),
+      compacted: zod.boolean(),
+      compactedIntoId: zod.string().nullish(),
+      agentId: zod.string().nullish(),
+      sourceTaskId: zod.string().nullish(),
+      sourceResonanceId: zod.string().nullish(),
+      metadata: zod.record(zod.string(), zod.unknown()).optional(),
+      absorbState: zod
+        .enum(["not_required", "pending", "absorbed", "failed"])
+        .describe(
+          "Wave 4 — HRM absorb lifecycle. `not_required` means the event is\nlocal-only and was never queued for kannaka-memory. `pending`\nmeans it was published on KANNAKA.absorb and is awaiting an\nack. `absorbed` means HRM acked success. `failed` means publish\nerrored or HRM nacked — the operator can retry.\n",
+        ),
+      absorbStateUpdatedAt: zod.coerce.date().nullish(),
+      absorbAttempts: zod
+        .number()
+        .default(absorbMemoryResponseEventOneAbsorbAttemptsDefault),
+      absorbedAt: zod.coerce.date().nullish(),
+      lastAbsorbError: zod.string().nullish(),
+      idempotencyKey: zod.string().nullish(),
+      inboundExemplar: zod
+        .boolean()
+        .describe(
+          "True when the event arrived from KANNAKA.exemplars (HRM candidate).",
+        ),
+      exemplarOutcome: zod
+        .union([
+          zod.literal("strengthened"),
+          zod.literal("pruned"),
+          zod.literal(null),
+        ])
+        .nullish()
+        .describe("Operator decision on an inbound exemplar; null = pending."),
+      createdAt: zod.coerce.date(),
+    }),
+    zod.null(),
+  ]),
+  publish: zod.object({
+    delivered: zod.boolean(),
+    message: zod.string(),
+  }),
+});
+
+/**
+ * @summary Decide on an inbound HRM exemplar candidate. `strengthened` re-publishes
+on KANNAKA.absorb so the HRM weights are reinforced; `pruned` rejects
+the candidate locally (no publish).
+
+ */
+export const DecideExemplarParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const DecideExemplarBody = zod.object({
+  outcome: zod.enum(["strengthened", "pruned"]),
+});
+
+export const decideExemplarResponseEventOneAbsorbAttemptsDefault = 0;
+
+export const DecideExemplarResponse = zod.object({
+  event: zod.union([
+    zod.object({
+      id: zod.string(),
+      type: zod.enum([
+        "agent_output",
+        "signal",
+        "decision",
+        "artifact",
+        "system_event",
+        "resonance_event",
+        "dream_lite_compression",
+      ]),
+      tag: zod.string(),
+      tags: zod.array(zod.string()),
+      content: zod.string(),
+      summary: zod.string(),
+      sourceAttribution: zod.string(),
+      importance: zod.number(),
+      decision: zod.enum(["approved", "rejected", "duplicate", "pending"]),
+      reason: zod.string().nullish(),
+      compacted: zod.boolean(),
+      compactedIntoId: zod.string().nullish(),
+      agentId: zod.string().nullish(),
+      sourceTaskId: zod.string().nullish(),
+      sourceResonanceId: zod.string().nullish(),
+      metadata: zod.record(zod.string(), zod.unknown()).optional(),
+      absorbState: zod
+        .enum(["not_required", "pending", "absorbed", "failed"])
+        .describe(
+          "Wave 4 — HRM absorb lifecycle. `not_required` means the event is\nlocal-only and was never queued for kannaka-memory. `pending`\nmeans it was published on KANNAKA.absorb and is awaiting an\nack. `absorbed` means HRM acked success. `failed` means publish\nerrored or HRM nacked — the operator can retry.\n",
+        ),
+      absorbStateUpdatedAt: zod.coerce.date().nullish(),
+      absorbAttempts: zod
+        .number()
+        .default(decideExemplarResponseEventOneAbsorbAttemptsDefault),
+      absorbedAt: zod.coerce.date().nullish(),
+      lastAbsorbError: zod.string().nullish(),
+      idempotencyKey: zod.string().nullish(),
+      inboundExemplar: zod
+        .boolean()
+        .describe(
+          "True when the event arrived from KANNAKA.exemplars (HRM candidate).",
+        ),
+      exemplarOutcome: zod
+        .union([
+          zod.literal("strengthened"),
+          zod.literal("pruned"),
+          zod.literal(null),
+        ])
+        .nullish()
+        .describe("Operator decision on an inbound exemplar; null = pending."),
+      createdAt: zod.coerce.date(),
+    }),
+    zod.null(),
+  ]),
+  publish: zod.object({
+    delivered: zod.boolean(),
+    message: zod.string(),
+  }),
+});
+
+/**
+ * @summary End-to-end trace for a memory event: walks signal → resonance →
+arm response → memory candidate → absorb ack.
+
+ */
+export const TraceMemoryParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const TraceMemoryResponse = zod.object({
+  memoryId: zod.string(),
+  summary: zod.object({
+    hasSignal: zod.boolean(),
+    hasTask: zod.boolean(),
+    hasResonance: zod.boolean(),
+    responseCount: zod.number(),
+    absorbState: zod.enum(["not_required", "pending", "absorbed", "failed"]),
+    absorbedAt: zod.coerce.date().nullish(),
+    idempotencyKey: zod.string().nullish(),
+  }),
+  steps: zod.array(
+    zod.object({
+      kind: zod.enum([
+        "signal",
+        "task",
+        "resonance",
+        "resonance_response",
+        "memory",
+        "absorb_event",
+        "log",
+      ]),
+      id: zod.string(),
+      at: zod.coerce.date(),
+      title: zod.string(),
+      detail: zod.string(),
+      metadata: zod.record(zod.string(), zod.unknown()).optional(),
+    }),
+  ),
 });
 
 export const ListLogsResponseItem = zod.object({
@@ -516,7 +975,14 @@ export const ListLogsResponseItem = zod.object({
     "task_completed",
     "task_failed",
     "memory_approved",
+    "memory_pending",
     "memory_rejected",
+    "memory_local_approved",
+    "memory_absorb_published",
+    "memory_absorb_failed",
+    "memory_absorbed",
+    "memory_absorb_nack",
+    "memory_exemplar_pruned",
     "resonance_created",
     "resonance_response",
     "resonance_resolved",

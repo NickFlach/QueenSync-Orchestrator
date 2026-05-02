@@ -5,9 +5,8 @@
  * QueenSync — Kannaka agent orchestration & resonance control plane
  * OpenAPI spec version: 0.2.0
  */
+import type { ExemplarDecisionBodyOutcome } from "./exemplarDecisionBodyOutcome";
 
-export type ListMemoryParams = {
-  includeCompacted?: boolean;
-  includeRejected?: boolean;
-  inboundExemplarsOnly?: boolean;
-};
+export interface ExemplarDecisionBody {
+  outcome: ExemplarDecisionBodyOutcome;
+}

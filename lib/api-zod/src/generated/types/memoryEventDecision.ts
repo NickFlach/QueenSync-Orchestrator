@@ -13,4 +13,5 @@ export const MemoryEventDecision = {
   approved: "approved",
   rejected: "rejected",
   duplicate: "duplicate",
+  pending: "pending",
 } as const;

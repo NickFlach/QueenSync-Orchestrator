@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.2.0
  */
 
+export * from "./absorbActionResult";
+export * from "./absorbActionResultPublish";
 export * from "./adapterEvent";
 export * from "./adapterEventRaw";
 export * from "./adapterHealth";
@@ -26,10 +28,14 @@ export * from "./createTaskBody";
 export * from "./createTaskBodyContext";
 export * from "./demoResult";
 export * from "./dreamLiteBody";
+export * from "./dreamLiteDispatchResult";
 export * from "./dreamLiteResult";
 export * from "./evaluateMemoryBody";
 export * from "./evaluateMemoryBodyMetadata";
 export * from "./evaluateMemoryBodyType";
+export * from "./exemplarDecisionBody";
+export * from "./exemplarDecisionBodyOutcome";
+export * from "./exemplarStats";
 export * from "./healthStatus";
 export * from "./injectSignalBody";
 export * from "./injectSignalBodyPayload";
@@ -41,9 +47,17 @@ export * from "./logEntryMetadata";
 export * from "./memoryEvaluation";
 export * from "./memoryEvaluationDecision";
 export * from "./memoryEvent";
+export * from "./memoryEventAbsorbState";
 export * from "./memoryEventDecision";
+export * from "./memoryEventExemplarOutcome";
 export * from "./memoryEventMetadata";
 export * from "./memoryEventType";
+export * from "./memoryTrace";
+export * from "./memoryTraceStep";
+export * from "./memoryTraceStepKind";
+export * from "./memoryTraceStepMetadata";
+export * from "./memoryTraceSummary";
+export * from "./memoryTraceSummaryAbsorbState";
 export * from "./natsStatus";
 export * from "./natsStatusMode";
 export * from "./natsStatusState";
