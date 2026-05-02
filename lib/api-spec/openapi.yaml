@@ -241,6 +241,15 @@ paths:
     get:
       operationId: listMemory
       tags: [memory]
+      parameters:
+        - name: includeCompacted
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+        - name: includeRejected
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
       responses:
         "200":
           description: OK
@@ -265,6 +274,23 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/MemoryEvaluation" }
+
+  /memory/dream-lite:
+    post:
+      operationId: compressMemoryDreamLite
+      tags: [memory]
+      summary: Run Dream Lite compression over a window of recent approved memory events.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DreamLiteBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DreamLiteResult" }
 
   /logs:
     get:
@@ -762,7 +788,20 @@ components:
 
     MemoryEvent:
       type: object
-      required: [id, type, tag, content, importance, decision, createdAt]
+      required:
+        [
+          id,
+          type,
+          tag,
+          tags,
+          content,
+          summary,
+          sourceAttribution,
+          importance,
+          decision,
+          compacted,
+          createdAt,
+        ]
       properties:
         id: { type: string }
         type:
@@ -774,12 +813,21 @@ components:
             - artifact
             - system_event
             - resonance_event
+            - dream_lite_compression
         tag: { type: string }
+        tags:
+          type: array
+          items: { type: string }
         content: { type: string }
+        summary: { type: string }
+        sourceAttribution: { type: string }
         importance: { type: number }
         decision:
           type: string
           enum: [approved, rejected, duplicate]
+        reason: { type: ["string", "null"] }
+        compacted: { type: boolean }
+        compactedIntoId: { type: ["string", "null"] }
         agentId: { type: ["string", "null"] }
         sourceTaskId: { type: ["string", "null"] }
         sourceResonanceId: { type: ["string", "null"] }
@@ -996,6 +1044,26 @@ components:
           type: array
           items: { type: string }
         message: { type: ["string", "null"] }
+
+    DreamLiteBody:
+      type: object
+      properties:
+        windowMinutes: { type: ["integer", "null"] }
+
+    DreamLiteResult:
+      type: object
+      required: [compactedCount, windowMinutes, message]
+      properties:
+        compactedCount: { type: integer }
+        windowMinutes: { type: integer }
+        message: { type: string }
+        compressionEvent:
+          oneOf:
+            - $ref: "#/components/schemas/MemoryEvent"
+            - type: "null"
+        compactedIds:
+          type: array
+          items: { type: string }
 
     ObservatoryConsciousness:
       type: object

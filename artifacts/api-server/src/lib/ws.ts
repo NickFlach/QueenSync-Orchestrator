@@ -15,6 +15,7 @@ export type QueenSyncEventType =
   | "task_updated"
   | "signal_received"
   | "memory_event"
+  | "memory_compacted"
   | "log_event"
   | "resonance_created"
   | "resonance_response"

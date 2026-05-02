@@ -13,9 +13,17 @@ export interface MemoryEvent {
   id: string;
   type: MemoryEventType;
   tag: string;
+  tags: string[];
   content: string;
+  summary: string;
+  sourceAttribution: string;
   importance: number;
   decision: MemoryEventDecision;
+  /** @nullable */
+  reason?: string | null;
+  compacted: boolean;
+  /** @nullable */
+  compactedIntoId?: string | null;
   /** @nullable */
   agentId?: string | null;
   /** @nullable */

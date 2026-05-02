@@ -1,18 +1,17 @@
 import { Router, type IRouter } from "express";
 import { nanoid } from "nanoid";
-import { desc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   db,
   armsTable,
   tasksTable,
   resonanceFieldsTable,
-  memoryEventsTable,
 } from "@workspace/db";
 import { recordLog } from "../lib/log";
 import { broadcast } from "../lib/ws";
 import { dispatchTask } from "../lib/router";
 import { autoLocalResonance, resolveField } from "../lib/resonance";
-import { evaluateMemory } from "../lib/memory-gate";
+import { runDreamLiteCompression } from "../lib/memory-compress";
 import { requireOperator } from "../lib/auth";
 import {
   fetchObservatoryState,
@@ -126,34 +125,15 @@ router.post(
   requireOperator,
   async (req, res): Promise<void> => {
     const audit = getAuditContext(req);
-    const recent = await db
-      .select()
-      .from(memoryEventsTable)
-      .orderBy(desc(memoryEventsTable.createdAt))
-      .limit(20);
-    const summary =
-      recent.length === 0
-        ? "Memory Keeper hums in an empty room — no memories yet."
-        : `Memory Keeper compressed ${recent.length} memories: ${recent
-            .map((m) => m.tag)
-            .slice(0, 8)
-            .join(", ")}.`;
-    const result = await evaluateMemory({
-      type: "decision",
-      content: summary,
-      agentId: "memory_keeper_01",
-      metadata: { kind: "dream_lite" },
-    });
-    await recordLog({
-      eventType: "dream_lite",
-      source: "memory_keeper_01",
-      summary,
-      metadata: { decision: result.decision, importance: result.importance },
-      audit,
+    // Back-compat alias for the legacy demo button. The canonical route is
+    // POST /api/memory/dream-lite (Memory Governance v1.0).
+    const result = await runDreamLiteCompression({
+      windowMinutes: 60,
+      trigger: audit.trigger,
     });
     res.json({
-      created: result.event ? [result.event.id] : [],
-      message: summary,
+      created: result.compressionEvent ? [result.compressionEvent.id] : [],
+      message: result.message,
     });
   },
 );

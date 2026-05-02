@@ -16,4 +16,5 @@ export const MemoryEventType = {
   artifact: "artifact",
   system_event: "system_event",
   resonance_event: "resonance_event",
+  dream_lite_compression: "dream_lite_compression",
 } as const;

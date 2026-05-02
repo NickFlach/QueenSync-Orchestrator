@@ -348,6 +348,7 @@ export const MemoryEventType = {
   artifact: "artifact",
   system_event: "system_event",
   resonance_event: "resonance_event",
+  dream_lite_compression: "dream_lite_compression",
 } as const;
 
 export type MemoryEventDecision =
@@ -365,9 +366,17 @@ export interface MemoryEvent {
   id: string;
   type: MemoryEventType;
   tag: string;
+  tags: string[];
   content: string;
+  summary: string;
+  sourceAttribution: string;
   importance: number;
   decision: MemoryEventDecision;
+  /** @nullable */
+  reason?: string | null;
+  compacted: boolean;
+  /** @nullable */
+  compactedIntoId?: string | null;
   /** @nullable */
   agentId?: string | null;
   /** @nullable */
@@ -612,6 +621,19 @@ export interface DemoResult {
   message?: string | null;
 }
 
+export interface DreamLiteBody {
+  /** @nullable */
+  windowMinutes?: number | null;
+}
+
+export interface DreamLiteResult {
+  compactedCount: number;
+  windowMinutes: number;
+  message: string;
+  compressionEvent?: MemoryEvent | null;
+  compactedIds?: string[];
+}
+
 export interface ObservatoryConsciousness {
   level: string;
   phi: number;
@@ -673,3 +695,8 @@ export interface ObservatoryConfig {
   /** @nullable */
   kannaktopusWakeUrl?: string | null;
 }
+
+export type ListMemoryParams = {
+  includeCompacted?: boolean;
+  includeRejected?: boolean;
+};

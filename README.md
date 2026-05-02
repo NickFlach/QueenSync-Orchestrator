@@ -290,8 +290,9 @@ Demo buttons on the overview page exercise these arms end-to-end:
 
 - **Wake Kannaktopus** — issues 3 demo tasks routed through `architect_01` /
   `signal_keeper_01` / `memory_keeper_01`.
-- **Dream Lite** — runs the Memory Gate over recent memory events and emits a
-  `dream_lite` decision via `memory_keeper_01`.
+- **Dream Lite** — calls `POST /api/memory/dream-lite` (Memory Governance
+  v1.0), compresses the last 60m of approved memories into a single
+  `dream_lite_compression` event, and marks the originals `compacted`.
 - **Resonance Storm** — opens 4 resonance fields, scores responses from every
   arm, and resolves each one via best-of / merge.
 
@@ -316,7 +317,9 @@ All routes live under `/api`. Live event stream is on `/ws`.
 | POST   | `/api/tasks/:id/callback`             | External arm result callback (HMAC-auth) |
 | GET    | `/api/signals`                        | List ingested signals                    |
 | POST   | `/api/signals`                        | Inject a signal — always becomes a task  |
-| GET    | `/api/memory`                         | Memory Gate decisions                    |
+| GET    | `/api/memory`                         | Memory Gate decisions (`?includeCompacted=&includeRejected=`) |
+| POST   | `/api/memory/evaluate`                | Run Memory Gate over an arbitrary payload |
+| POST   | `/api/memory/dream-lite`              | Compress recent approved memories (Dream Lite v1.0) |
 | GET    | `/api/logs`                           | Execution log                            |
 | GET    | `/api/resonance` `/active`            | List / list active resonance fields      |
 | POST   | `/api/resonance`                      | Open a new resonance field               |
@@ -405,14 +408,53 @@ reuse the existing capability-matching + callback authentication paths. No
 schema or onboarding UI change will be needed to adopt MCP — only the
 `dispatchExternal` body shape.
 
-## Future kannaka-memory integration
+## Memory Gate (Memory Governance v1.0)
 
-The Memory Gate keeps a local audit log of approved / rejected events in
-Postgres. The plan is to mirror approved events to
-[github.com/NickFlach/kannaka-memory](https://github.com/NickFlach/kannaka-memory)
-as the canonical identity / memory substrate. A `lib/memory-adapter.ts`
-placeholder will land alongside the v1.0 Memory Governance task; today the
-Memory Gate runs entirely against Postgres.
+The Memory Gate is the policy layer between every agent output / signal /
+resonance and the durable memory log. v1.0 turns the Memory Stream into a
+real audit trail of what the system remembers, why, and where it came from.
+
+**Importance scoring.** Every evaluation gets a deterministic score in
+`[0, 1]` based on content length, type (`decision` / `resonance_event` /
+`agent_output`), keyword density (`decision`, `dream`, `anomaly`, etc.), and
+whether it links back to a resonance field. The threshold is `0.40`.
+
+**Tag classification + summary + source attribution.** Each event is
+classified against a small loose dictionary (`decision`, `dream`, `transmit`,
+`audit`, `observe`, …). The gate also stores a short truncated `summary`
+and a human-readable `sourceAttribution` string built from the agent's
+display name plus task / resonance ids — every row in the Memory Stream
+shows where the memory came from at a glance.
+
+**24h SHA1 dedupe.** Identical content (case-insensitive, trimmed) within
+the last 24h is rejected as a duplicate.
+
+**Rejection trail.** Below-threshold and duplicate events are *persisted*
+with `decision=rejected` / `decision=duplicate` and a human-readable
+`reason`, instead of being silently dropped. The Memory page has a "Show
+rejected" toggle so operators can audit them.
+
+**Dream Lite compaction.** `POST /api/memory/dream-lite` (and the demo
+button on the Overview page) takes a window of recent approved memory
+events (default 60m, override via `{ "windowMinutes": N }`), builds a
+deterministic top-N tag aggregation + 3-line sample summary, inserts a
+single new `dream_lite_compression` memory event, and marks the originals
+`compacted=true` with `compactedIntoId` set to the compression event. The
+Memory Stream hides compacted rows by default; toggle "Show compacted" to
+see what each compression replaced (children render grouped under the
+parent compression row).
+
+**kannaka-memory adapter stub.** Every approved event (and every Dream
+Lite compression) is mirrored through
+`artifacts/api-server/src/lib/memory-adapter.ts → pushToKannakaMemory(event)`.
+Today the function is a no-op that just logs. The header comment in that
+file documents the planned wire shape (HMAC-signed POST to
+`KANNAKA_MEMORY_URL/api/remember`, stamp returned `memoryId` back onto
+metadata, stream subsequent updates over `KANNAKA.memory.echo`). The live
+bridge lands under v2 Wave 4.
+
+The repo for the canonical substrate:
+[github.com/NickFlach/kannaka-memory](https://github.com/NickFlach/kannaka-memory).
 
 ## Environment variables
 

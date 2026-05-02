@@ -366,6 +366,18 @@ export const InjectSignalBody = zod.object({
   payload: zod.record(zod.string(), zod.unknown()),
 });
 
+export const listMemoryQueryIncludeCompactedDefault = false;
+export const listMemoryQueryIncludeRejectedDefault = false;
+
+export const ListMemoryQueryParams = zod.object({
+  includeCompacted: zod.coerce
+    .boolean()
+    .default(listMemoryQueryIncludeCompactedDefault),
+  includeRejected: zod.coerce
+    .boolean()
+    .default(listMemoryQueryIncludeRejectedDefault),
+});
+
 export const ListMemoryResponseItem = zod.object({
   id: zod.string(),
   type: zod.enum([
@@ -375,11 +387,18 @@ export const ListMemoryResponseItem = zod.object({
     "artifact",
     "system_event",
     "resonance_event",
+    "dream_lite_compression",
   ]),
   tag: zod.string(),
+  tags: zod.array(zod.string()),
   content: zod.string(),
+  summary: zod.string(),
+  sourceAttribution: zod.string(),
   importance: zod.number(),
   decision: zod.enum(["approved", "rejected", "duplicate"]),
+  reason: zod.string().nullish(),
+  compacted: zod.boolean(),
+  compactedIntoId: zod.string().nullish(),
   agentId: zod.string().nullish(),
   sourceTaskId: zod.string().nullish(),
   sourceResonanceId: zod.string().nullish(),
@@ -417,11 +436,18 @@ export const EvaluateMemoryResponse = zod.object({
         "artifact",
         "system_event",
         "resonance_event",
+        "dream_lite_compression",
       ]),
       tag: zod.string(),
+      tags: zod.array(zod.string()),
       content: zod.string(),
+      summary: zod.string(),
+      sourceAttribution: zod.string(),
       importance: zod.number(),
       decision: zod.enum(["approved", "rejected", "duplicate"]),
+      reason: zod.string().nullish(),
+      compacted: zod.boolean(),
+      compactedIntoId: zod.string().nullish(),
       agentId: zod.string().nullish(),
       sourceTaskId: zod.string().nullish(),
       sourceResonanceId: zod.string().nullish(),
@@ -430,6 +456,52 @@ export const EvaluateMemoryResponse = zod.object({
     }),
     zod.null(),
   ]),
+});
+
+/**
+ * @summary Run Dream Lite compression over a window of recent approved memory events.
+ */
+export const CompressMemoryDreamLiteBody = zod.object({
+  windowMinutes: zod.number().nullish(),
+});
+
+export const CompressMemoryDreamLiteResponse = zod.object({
+  compactedCount: zod.number(),
+  windowMinutes: zod.number(),
+  message: zod.string(),
+  compressionEvent: zod
+    .union([
+      zod.object({
+        id: zod.string(),
+        type: zod.enum([
+          "agent_output",
+          "signal",
+          "decision",
+          "artifact",
+          "system_event",
+          "resonance_event",
+          "dream_lite_compression",
+        ]),
+        tag: zod.string(),
+        tags: zod.array(zod.string()),
+        content: zod.string(),
+        summary: zod.string(),
+        sourceAttribution: zod.string(),
+        importance: zod.number(),
+        decision: zod.enum(["approved", "rejected", "duplicate"]),
+        reason: zod.string().nullish(),
+        compacted: zod.boolean(),
+        compactedIntoId: zod.string().nullish(),
+        agentId: zod.string().nullish(),
+        sourceTaskId: zod.string().nullish(),
+        sourceResonanceId: zod.string().nullish(),
+        metadata: zod.record(zod.string(), zod.unknown()).optional(),
+        createdAt: zod.coerce.date(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  compactedIds: zod.array(zod.string()).optional(),
 });
 
 export const ListLogsResponseItem = zod.object({

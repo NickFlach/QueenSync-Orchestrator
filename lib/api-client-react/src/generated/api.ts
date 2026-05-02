@@ -26,9 +26,12 @@ import type {
   CreateResonanceBody,
   CreateTaskBody,
   DemoResult,
+  DreamLiteBody,
+  DreamLiteResult,
   EvaluateMemoryBody,
   HealthStatus,
   InjectSignalBody,
+  ListMemoryParams,
   LogEntry,
   MemoryEvaluation,
   MemoryEvent,
@@ -1156,41 +1159,57 @@ export const useInjectSignal = <
   return useMutation(getInjectSignalMutationOptions(options));
 };
 
-export const getListMemoryUrl = () => {
-  return `/api/memory`;
+export const getListMemoryUrl = (params?: ListMemoryParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/memory?${stringifiedParams}`
+    : `/api/memory`;
 };
 
 export const listMemory = async (
+  params?: ListMemoryParams,
   options?: RequestInit,
 ): Promise<MemoryEvent[]> => {
-  return customFetch<MemoryEvent[]>(getListMemoryUrl(), {
+  return customFetch<MemoryEvent[]>(getListMemoryUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getListMemoryQueryKey = () => {
-  return [`/api/memory`] as const;
+export const getListMemoryQueryKey = (params?: ListMemoryParams) => {
+  return [`/api/memory`, ...(params ? [params] : [])] as const;
 };
 
 export const getListMemoryQueryOptions = <
   TData = Awaited<ReturnType<typeof listMemory>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listMemory>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: ListMemoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listMemory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListMemoryQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getListMemoryQueryKey(params);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof listMemory>>> = ({
     signal,
-  }) => listMemory({ signal, ...requestOptions });
+  }) => listMemory(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listMemory>>,
@@ -1207,15 +1226,18 @@ export type ListMemoryQueryError = ErrorType<unknown>;
 export function useListMemory<
   TData = Awaited<ReturnType<typeof listMemory>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listMemory>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListMemoryQueryOptions(options);
+>(
+  params?: ListMemoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listMemory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListMemoryQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -1302,6 +1324,92 @@ export const useEvaluateMemory = <
   TContext
 > => {
   return useMutation(getEvaluateMemoryMutationOptions(options));
+};
+
+/**
+ * @summary Run Dream Lite compression over a window of recent approved memory events.
+ */
+export const getCompressMemoryDreamLiteUrl = () => {
+  return `/api/memory/dream-lite`;
+};
+
+export const compressMemoryDreamLite = async (
+  dreamLiteBody?: DreamLiteBody,
+  options?: RequestInit,
+): Promise<DreamLiteResult> => {
+  return customFetch<DreamLiteResult>(getCompressMemoryDreamLiteUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(dreamLiteBody),
+  });
+};
+
+export const getCompressMemoryDreamLiteMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof compressMemoryDreamLite>>,
+    TError,
+    { data: BodyType<DreamLiteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof compressMemoryDreamLite>>,
+  TError,
+  { data: BodyType<DreamLiteBody> },
+  TContext
+> => {
+  const mutationKey = ["compressMemoryDreamLite"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof compressMemoryDreamLite>>,
+    { data: BodyType<DreamLiteBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return compressMemoryDreamLite(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CompressMemoryDreamLiteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof compressMemoryDreamLite>>
+>;
+export type CompressMemoryDreamLiteMutationBody = BodyType<DreamLiteBody>;
+export type CompressMemoryDreamLiteMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Run Dream Lite compression over a window of recent approved memory events.
+ */
+export const useCompressMemoryDreamLite = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof compressMemoryDreamLite>>,
+    TError,
+    { data: BodyType<DreamLiteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof compressMemoryDreamLite>>,
+  TError,
+  { data: BodyType<DreamLiteBody> },
+  TContext
+> => {
+  return useMutation(getCompressMemoryDreamLiteMutationOptions(options));
 };
 
 export const getListLogsUrl = () => {

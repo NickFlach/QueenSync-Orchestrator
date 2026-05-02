@@ -2,7 +2,7 @@ import {
   useGetSystemSummary,
   useListActiveResonance,
   useWakeKannaktopus,
-  useDreamLiteCompression,
+  useCompressMemoryDreamLite,
   useResonanceStorm,
   getGetSystemSummaryQueryKey,
   getListActiveResonanceQueryKey,
@@ -68,10 +68,13 @@ export default function Overview() {
       },
     },
   });
-  const dreamMutation = useDreamLiteCompression({
+  const dreamMutation = useCompressMemoryDreamLite({
     mutation: {
       onSuccess: (r) => {
-        toast({ title: "Dream Lite", description: r.message });
+        toast({
+          title: "Dream Lite",
+          description: r.message,
+        });
         invalidate();
       },
     },
@@ -120,7 +123,7 @@ export default function Overview() {
             <Zap className="w-4 h-4 mr-2" /> Wake Kannaktopus
           </Button>
           <Button
-            onClick={() => dreamMutation.mutate()}
+            onClick={() => dreamMutation.mutate({ data: {} })}
             disabled={dreamMutation.isPending}
             variant="outline"
             className="border-primary/50 hover:bg-primary/20 text-primary"
