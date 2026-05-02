@@ -93,15 +93,27 @@ describe("seedDefaults", () => {
     }
   });
 
-  it("real arms default to status=offline (await first heartbeat)", async () => {
+  it("real arms default to status=idle (dispatchable; demoted to offline by heartbeat sweep if they go silent)", async () => {
     delete process.env["QUEENSYNC_SEED_MOCK_ARMS"];
     await seedDefaults();
     const rows = await db
-      .select({ id: armsTable.id, status: armsTable.status })
+      .select({
+        id: armsTable.id,
+        status: armsTable.status,
+        lastHeartbeat: armsTable.lastHeartbeat,
+      })
       .from(armsTable)
       .where(inArray(armsTable.id, REAL_IDS));
     for (const r of rows) {
-      assert.equal(r.status, "offline", `${r.id} expected offline, got ${r.status}`);
+      assert.equal(r.status, "idle", `${r.id} expected idle, got ${r.status}`);
+      // lastHeartbeat is intentionally NULL on first seed so the heartbeat
+      // scheduler doesn't churn them — it only demotes arms that have
+      // heartbeated at least once.
+      assert.equal(
+        r.lastHeartbeat,
+        null,
+        `${r.id} should seed without lastHeartbeat`,
+      );
     }
   });
 });

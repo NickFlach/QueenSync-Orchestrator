@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-24", "postgresql-16"]
 
 [deployment]
 router = "application"
@@ -39,3 +39,6 @@ QUEENSYNC_VIEWER_TOKEN = "test-vw-token-456"
 QUEENSYNC_OPERATOR_PASSWORD = "op-pass-test"
 QUEENSYNC_VIEWER_PASSWORD = "vw-pass-test"
 QUEENSYNC_SESSION_SECRET = "test-session-secret-do-not-use-in-prod-12345678"
+
+[nix]
+channel = "stable-25_05"

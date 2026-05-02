@@ -1,4 +1,4 @@
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db, armsTable } from "@workspace/db";
 import { logger } from "./logger";
 
@@ -39,7 +39,7 @@ const REAL_ARMS = [
     id: "radio",
     name: "Radio",
     type: "external_webhook",
-    status: "offline",
+    status: "idle",
     capabilities: [
       "play",
       "oration",
@@ -64,7 +64,7 @@ const REAL_ARMS = [
     id: "observatory",
     name: "Observatory",
     type: "external_webhook",
-    status: "offline",
+    status: "idle",
     capabilities: [
       "observe",
       "audit",
@@ -89,7 +89,7 @@ const REAL_ARMS = [
     id: "kannaka-prime",
     name: "Kannaka Prime",
     type: "kannaktopus_arm",
-    status: "offline",
+    status: "idle",
     capabilities: [
       "build",
       "plan",
@@ -110,7 +110,7 @@ const REAL_ARMS = [
     id: "swarm-worker",
     name: "Swarm Worker",
     type: "kannaktopus_arm",
-    status: "offline",
+    status: "idle",
     capabilities: ["compose", "summarize", "recall", "ingest", "merge", "artifact"],
     authMethod: "none",
     description:
@@ -123,7 +123,7 @@ const REAL_ARMS = [
     id: "oracle-admin",
     name: "Oracle Admin",
     type: "oracle_admin",
-    status: "offline",
+    status: "idle",
     capabilities: [
       "restart_radio",
       "restart_observatory",
@@ -253,14 +253,48 @@ export async function seedDefaults() {
   }
 
   const missing = targetArms.filter((a) => !existingIds.has(a.id));
-  if (missing.length === 0) return;
-  await db.insert(armsTable).values(missing as never);
-  logger.info(
-    {
-      count: missing.length,
-      ids: missing.map((m) => m.id),
-      mocks: seedMocks,
-    },
-    "seeded default arms",
+  if (missing.length > 0) {
+    await db.insert(armsTable).values(missing as never);
+    logger.info(
+      {
+        count: missing.length,
+        ids: missing.map((m) => m.id),
+        mocks: seedMocks,
+      },
+      "seeded default arms",
+    );
+  }
+
+  // One-time migration: real arms used to seed with status=offline (Wave 3
+  // initial cut). The picker filters out offline arms, so the Quick Actions
+  // dispatch never reached oracle-admin. Promote any real-arm row that's
+  // still in the old offline-without-heartbeat state to idle so it becomes
+  // dispatchable. Arms that are offline because they actually heartbeated
+  // and went stale are left alone (their lastHeartbeat will be non-null).
+  const realIds: readonly string[] = REAL_ARMS.map((a) => a.id);
+  const toPromote = existing.filter(
+    (row) =>
+      realIds.includes(row.id) &&
+      row.status === "offline" &&
+      row.lastHeartbeat === null,
   );
+  if (toPromote.length > 0) {
+    await db
+      .update(armsTable)
+      .set({ status: "idle" })
+      .where(
+        and(
+          inArray(
+            armsTable.id,
+            toPromote.map((r) => r.id),
+          ),
+          eq(armsTable.status, "offline"),
+          isNull(armsTable.lastHeartbeat),
+        ),
+      );
+    logger.info(
+      { ids: toPromote.map((r) => r.id) },
+      "promoted real arms from offline → idle (no heartbeat received yet)",
+    );
+  }
 }
