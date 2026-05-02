@@ -208,12 +208,25 @@ A "Restart Radio" button on the radio arm dispatches a task to the
 #### Wave 3 — implementation notes (delivered)
 
 - **Seed lineup.** `artifacts/api-server/src/lib/seed.ts` now ships with two
-  arrays: `REAL_ARMS` (the five live registrations above, all defaulting to
-  `status="offline"` until first heartbeat / NATS join) and `MOCK_ARMS`
+  arrays: `REAL_ARMS` (the five live registrations above) and `MOCK_ARMS`
   (the legacy Wave-1 demo set). The mocks are only inserted when
   `QUEENSYNC_SEED_MOCK_ARMS=true|1`. On boot, any legacy mock rows from
   earlier deploys are deleted; flipping the flag back off cleans them up
-  on the next boot.
+  on the next boot. Real arms seed `status="idle"` so the capability
+  picker can dispatch to them immediately — the heartbeat sweeper
+  demotes them to `offline` when they actually go silent. A one-time
+  migration in `seedDefaults()` promotes any pre-existing real-arm row
+  whose status is still `offline` AND `lastHeartbeat IS NULL` (the old
+  default) to `idle`; rows that are offline because they actually
+  heartbeated and went stale are left alone. The same loop reconciles
+  capability/endpoint drift on existing real-arm rows so the ADR's
+  required capability set stays the source of truth.
+- **Capability lineup.** Wave 3 fixes the picker drift surfaced in code
+  review: `observatory` adds `phi_history`; `kannaka-prime` adds
+  `recall` and `swarm_serve`; `swarm-worker` adds `worker_compose` and
+  carries the `queue:kannaka_workers` resonance tag (representing the
+  NATS queue group `kannaka_workers` on the arms table, which has no
+  dedicated column).
 - **`oracle_admin` arm type.** Added to the `Arm.type` and
   `OnboardArmBody.type` enums in `lib/api-spec/openapi.yaml`; codegen
   regenerated. The router (`lib/router.ts:dispatchExternal`) now treats
@@ -283,6 +296,14 @@ per-arm rotating credentials (#17), oracle-admin runtime hardening
 behavior. The shim ships with a single shared HMAC secret —
 operators **must** set `QUEENSYNC_ORACLE_ADMIN_HMAC_SECRET` (and the
 matching env on the Oracle host) before exposing the shim publicly.
+
+**Transport security.** HMAC body signing protects request integrity
+and authenticity, but plain HTTP allows passive on-path replay within
+the ±5min timestamp window. The seeded `QUEENSYNC_ORACLE_ADMIN_URL`
+defaults to `https://oracle-admin.ninja-portal.com/dispatch`; the
+shim is expected to bind `127.0.0.1:8090` and be exposed only via a
+TLS-terminating reverse proxy (nginx/caddy/Traefik) or a private
+tunnel (Tailscale/WireGuard). The README runbook covers both.
 
 ### Wave 4 — Memory Gate ↔ HRM bridge
 

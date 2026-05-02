@@ -72,6 +72,7 @@ const REAL_ARMS = [
       "ingest",
       "consciousness_metrics",
       "hrm_state",
+      "phi_history",
     ],
     endpointUrl:
       process.env["OBSERVATORY_BASE_URL"] ?? "https://observatory.ninja-portal.com",
@@ -98,6 +99,8 @@ const REAL_ARMS = [
       "dream",
       "exemplar",
       "memory_consolidate",
+      "recall",
+      "swarm_serve",
     ],
     authMethod: "none",
     description:
@@ -111,11 +114,19 @@ const REAL_ARMS = [
     name: "Swarm Worker",
     type: "kannaktopus_arm",
     status: "idle",
-    capabilities: ["compose", "summarize", "recall", "ingest", "merge", "artifact"],
+    capabilities: [
+      "compose",
+      "summarize",
+      "recall",
+      "ingest",
+      "merge",
+      "artifact",
+      "worker_compose",
+    ],
     authMethod: "none",
     description:
-      "Generic kannaktopus worker. Picks up un-routed capability requests as a fan-out for the prime arm.",
-    resonanceTags: ["compose", "summarize", "ingest", "merge"],
+      "Generic kannaktopus worker — represents the NATS queue group `kannaka_workers`. Picks up un-routed capability requests as a fan-out for the prime arm.",
+    resonanceTags: ["compose", "summarize", "ingest", "merge", "queue:kannaka_workers"],
     resonanceSensitivity: 0.35,
     resonanceMode: "auto",
   },
@@ -134,10 +145,10 @@ const REAL_ARMS = [
     ],
     endpointUrl:
       process.env["QUEENSYNC_ORACLE_ADMIN_URL"] ??
-      "http://oracle.ninja-portal.com:8090/dispatch",
+      "https://oracle-admin.ninja-portal.com/dispatch",
     heartbeatUrl:
       process.env["QUEENSYNC_ORACLE_ADMIN_HEARTBEAT_URL"] ??
-      "http://oracle.ninja-portal.com:8090/healthz",
+      "https://oracle-admin.ninja-portal.com/healthz",
     authMethod: "none",
     description:
       "Privileged shim running on the bare-metal Oracle host. Receives HMAC-signed dispatches from QueenSync to restart services, trigger oration, set overrides, kick dream cycles, and report kannaka status.",
@@ -295,6 +306,33 @@ export async function seedDefaults() {
     logger.info(
       { ids: toPromote.map((r) => r.id) },
       "promoted real arms from offline → idle (no heartbeat received yet)",
+    );
+  }
+
+  // Reconcile capability/endpoint drift on existing real-arm rows so the
+  // ADR's required capability set is the source of truth even when an arm
+  // row was inserted by an earlier seed revision.
+  for (const target of REAL_ARMS) {
+    const row = existing.find((r) => r.id === target.id);
+    if (!row) continue;
+    const capsDiffer =
+      row.capabilities.length !== target.capabilities.length ||
+      target.capabilities.some((c) => !row.capabilities.includes(c));
+    const urlDiffers =
+      (target as { endpointUrl?: string }).endpointUrl !== undefined &&
+      row.endpointUrl !== (target as { endpointUrl?: string }).endpointUrl;
+    if (!capsDiffer && !urlDiffers) continue;
+    const patch: Record<string, unknown> = {};
+    if (capsDiffer) patch["capabilities"] = [...target.capabilities];
+    if (urlDiffers) {
+      patch["endpointUrl"] = (target as { endpointUrl?: string }).endpointUrl;
+      patch["heartbeatUrl"] =
+        (target as { heartbeatUrl?: string }).heartbeatUrl ?? row.heartbeatUrl;
+    }
+    await db.update(armsTable).set(patch).where(eq(armsTable.id, target.id));
+    logger.info(
+      { id: target.id, capsDiffer, urlDiffers },
+      "reconciled real-arm row to current ADR-002 capability/endpoint set",
     );
   }
 }

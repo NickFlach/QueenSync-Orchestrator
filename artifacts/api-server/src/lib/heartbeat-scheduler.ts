@@ -1,4 +1,4 @@
-import { and, lt, ne, inArray, sql, isNotNull } from "drizzle-orm";
+import { and, lt, ne, inArray, isNotNull } from "drizzle-orm";
 import { db, armsTable } from "@workspace/db";
 import { logger } from "./logger";
 import { broadcast } from "./ws";
@@ -42,13 +42,9 @@ function getStaleMs(opts: HeartbeatSchedulerOptions = {}): number {
 }
 
 /**
- * Run a single sweep — find arms whose lastHeartbeat is stale and demote
- * them to `offline`. Returns the IDs that were demoted (useful in tests).
- *
- * Arms that have never heartbeated (lastHeartbeat IS NULL) are intentionally
- * left alone — many arms only ever respond to NATS REQ/REPLY and don't ping
- * the heartbeat endpoint. Those should be marked offline via NATS presence
- * leave events (handled in nats-bridge.ts), or left in their seeded state.
+ * Run a single sweep — demote arms whose lastHeartbeat is stale to
+ * `offline`. Skips arms with NULL lastHeartbeat (never pinged) so seeded
+ * rows don't churn. Returns the IDs that were actually demoted.
  */
 export async function sweepStaleHeartbeats(
   opts: HeartbeatSchedulerOptions = {},
@@ -73,10 +69,8 @@ export async function sweepStaleHeartbeats(
     );
   if (stale.length === 0) return [];
   const ids = stale.map((s) => s.id);
-  // Re-apply the staleness predicate on UPDATE so an arm that heartbeats
-  // between our SELECT and UPDATE doesn't get falsely demoted (compare-
-  // and-set). `updated` is the set of rows we actually demoted; rows that
-  // raced past the cutoff are silently skipped.
+  // Compare-and-set: re-apply the staleness predicate on UPDATE so an arm
+  // that heartbeats between SELECT and UPDATE isn't falsely demoted.
   const updated = await db
     .update(armsTable)
     .set({ status: "offline" })
@@ -114,8 +108,6 @@ export async function sweepStaleHeartbeats(
     { count: finalIds.length, ids: finalIds, staleMs },
     "heartbeat sweep — arms marked offline",
   );
-  // Touch sql to satisfy drizzle import inference even if unused at runtime.
-  void sql;
   return finalIds;
 }
 

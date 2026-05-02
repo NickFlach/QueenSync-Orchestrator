@@ -76,9 +76,29 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now queensync-oracle-admin.service
 
 # 6. Verify.
-curl -fsS http://oracle.ninja-portal.com:8090/healthz
+curl -fsS https://oracle-admin.ninja-portal.com/healthz
 sudo journalctl -fu queensync-oracle-admin.service
 ```
+
+### TLS is mandatory for public exposure
+
+The shim itself binds plain HTTP on `127.0.0.1:$PORT` (default 8090). HMAC
+body signing protects integrity and authenticity, but **HMAC over plain
+HTTP is replayable by anyone who can observe traffic within the ±5 minute
+timestamp window** — a passive on-path attacker can capture a valid
+restart-radio dispatch and replay it. So the shim must be reachable only
+through one of:
+
+1. A TLS-terminating reverse proxy on the Oracle host (nginx, caddy, or
+   Traefik) with a real cert from Let's Encrypt — this is what
+   `https://oracle-admin.ninja-portal.com` resolves to.
+2. A private network tunnel (Tailscale / WireGuard / SSH local-forward)
+   from the QueenSync host, with the public firewall closed to 8090.
+
+Do **not** open port 8090 directly to the public internet. The seeded
+`QUEENSYNC_ORACLE_ADMIN_URL` defaults to `https://…` for this reason; if
+you change it to plain `http://`, QueenSync will still dispatch but
+you've lost replay protection.
 
 ## Local development
 
