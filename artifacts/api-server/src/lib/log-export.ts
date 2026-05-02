@@ -24,6 +24,37 @@ const PATH_ENV = "QUEENSYNC_LOG_FILE";
 const MAX_BYTES_ENV = "QUEENSYNC_LOG_FILE_MAX_BYTES";
 const DEFAULT_MAX_BYTES = 25 * 1024 * 1024;
 
+// Suffix appended to rotated files: ISO timestamp with `:` and `.` replaced
+// with `-`, e.g. `audit.log.2026-05-02T12-34-56-789Z`. Exported so the log
+// shipper can identify rotated files in the same directory.
+export const ROTATED_SUFFIX_RE =
+  /\.(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)$/;
+
+export function getLogExportPath(): string | null {
+  const raw = process.env[PATH_ENV];
+  if (!raw) return null;
+  return resolve(raw);
+}
+
+/**
+ * Parse the ISO timestamp out of a rotated-file suffix.
+ * Returns null if `name` does not look like a rotated file.
+ */
+export function parseRotatedTimestamp(name: string): Date | null {
+  const m = name.match(ROTATED_SUFFIX_RE);
+  if (!m) return null;
+  const ts = m[1];
+  // Reverse the substitution: last three `-` and the one before `Z`
+  // came from `.` and `:` respectively. The timestamp shape is
+  // YYYY-MM-DDTHH-MM-SS-mmmZ.
+  const iso = ts.replace(
+    /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/,
+    "$1T$2:$3:$4.$5Z",
+  );
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 let initialised = false;
 let exportPath: string | null = null;
 let maxBytes = DEFAULT_MAX_BYTES;

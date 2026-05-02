@@ -155,6 +155,10 @@ The Replit workflows (`artifacts/api-server: API Server` and
 - [ ] `QUEENSYNC_LOG_FILE=/var/data/queensync/audit.log` set (Wave 5 —
       append-only export sink survives redeploys; rotates at
       `QUEENSYNC_LOG_FILE_MAX_BYTES`, default 25 MB)
+- [ ] Log shipping configured so rotated `audit.log.<ts>` files do not
+      fill the Reserved VM disk — see [Log shipping & retention](#log-shipping--retention)
+      below. `QUEENSYNC_LOG_RETENTION_DAYS` (default 30) prunes local
+      rotated files even if the upload target is offline.
 - [ ] Reserved VM deployment tier selected (for WebSocket persistence)
 - [ ] Custom domain `console.ninja-portal.com` attached and DNS validated
 - [ ] External canary deployed — see [`artifacts/canary/README.md`](artifacts/canary/README.md)
@@ -207,6 +211,50 @@ curl -X POST https://console.ninja-portal.com/api/arms/$ARM_ID/rotate-credential
 secret, the legacy shared `QUEENSYNC_API_KEY` /
 `QUEENSYNC_CALLBACK_SECRET` continue to work. Per-arm wins when both are
 present. Once all arms are migrated, you may unset the shared values.
+
+### Log shipping & retention
+
+The `QUEENSYNC_LOG_FILE` sink rotates at 25 MB by renaming the active
+file with an ISO timestamp suffix (e.g. `audit.log.2026-05-02T12-34-56-789Z`).
+A background shipper (`startLogShipper` in
+`artifacts/api-server/src/lib/log-shipper.ts`) wakes every 5 minutes,
+scans the directory for rotated files, uploads each one to the
+configured destination, and deletes the local copy on success.
+
+Even when no upload target is configured, the shipper still prunes
+files older than the retention window — so the Reserved VM disk cannot
+fill up if the upload target is offline for an extended period.
+
+**Common knobs**
+
+| Env var                          | Default        | Purpose                                              |
+|----------------------------------|----------------|------------------------------------------------------|
+| `QUEENSYNC_LOG_SHIP_TARGET`      | _(unset)_      | `s3`, `replit-object-storage`, or `logtail`          |
+| `QUEENSYNC_LOG_SHIP_INTERVAL_MS` | `300000`       | How often the shipper wakes (ms)                     |
+| `QUEENSYNC_LOG_RETENTION_DAYS`   | `30`           | Local prune window for rotated files                 |
+
+**S3** (`QUEENSYNC_LOG_SHIP_TARGET=s3`)
+
+- `QUEENSYNC_LOG_S3_BUCKET` — required
+- `QUEENSYNC_LOG_S3_PREFIX` — defaults to `queensync/audit/`
+- Standard AWS credential env vars (`AWS_REGION`, `AWS_ACCESS_KEY_ID`, …)
+- Requires `@aws-sdk/client-s3` to be installed in the api-server.
+
+**Replit Object Storage / GCS** (`QUEENSYNC_LOG_SHIP_TARGET=replit-object-storage`)
+
+- `QUEENSYNC_LOG_GCS_BUCKET` — defaults to `DEFAULT_OBJECT_STORAGE_BUCKET_ID`
+- `QUEENSYNC_LOG_GCS_PREFIX` — defaults to `queensync/audit/`
+- Requires `@google-cloud/storage` to be installed in the api-server.
+
+**Logtail / Better Stack** (`QUEENSYNC_LOG_SHIP_TARGET=logtail`)
+
+- `QUEENSYNC_LOG_LOGTAIL_TOKEN` — required (source token)
+- `QUEENSYNC_LOG_LOGTAIL_HOST` — defaults to `https://in.logs.betterstack.com`
+- No SDK install needed.
+
+If the target is misconfigured or the SDK is missing, the shipper logs
+an error once and falls back to retention-only mode — the API server
+still boots and serves traffic.
 
 ### Production deploy — Replit Reserved VM
 
