@@ -8,8 +8,16 @@ import { broadcast } from "../lib/ws";
 import { dispatchTask } from "../lib/router";
 import { evaluateMemory } from "../lib/memory-gate";
 import { verifyCallbackAuth, requireOperator } from "../lib/auth";
+import { getAuditContext } from "../lib/audit";
+import { rateLimit } from "../middlewares/rate-limit";
 
 const router: IRouter = Router();
+
+const callbackLimiter = rateLimit({
+  name: "task-callback",
+  windowMs: 60_000,
+  max: 60,
+});
 
 router.get("/tasks", async (_req, res): Promise<void> => {
   const rows = await db
@@ -26,6 +34,7 @@ router.post("/tasks", requireOperator, async (req, res): Promise<void> => {
     return;
   }
   const body = parsed.data;
+  const audit = getAuditContext(req);
   const [row] = await db
     .insert(tasksTable)
     .values({
@@ -43,6 +52,7 @@ router.post("/tasks", requireOperator, async (req, res): Promise<void> => {
     source: row.source,
     summary: `Task created: ${row.intent}`,
     metadata: { taskId: row.id },
+    audit,
   });
   broadcast({ type: "task_created", data: row });
   const dispatched = await dispatchTask(row);
@@ -88,7 +98,7 @@ router.post("/tasks/:id/retry", requireOperator, async (req, res): Promise<void>
   res.json(dispatched);
 });
 
-router.post("/tasks/:id/callback", async (req, res): Promise<void> => {
+router.post("/tasks/:id/callback", callbackLimiter, async (req, res): Promise<void> => {
   const id = String(req.params.id);
   const parsed = TaskCallbackBody.safeParse(req.body);
   if (!parsed.success) {
@@ -96,8 +106,16 @@ router.post("/tasks/:id/callback", async (req, res): Promise<void> => {
     return;
   }
   const body = parsed.data;
+  const audit = getAuditContext(req);
   const auth = verifyCallbackAuth(req, id, body.status);
   if (!auth.ok) {
+    await recordLog({
+      eventType: "callback_rejected",
+      source: "task-callback",
+      summary: `Callback rejected for task ${id}: ${auth.reason}`,
+      metadata: { taskId: id, reason: auth.reason },
+      audit,
+    });
     res.status(401).json({ error: `callback rejected: ${auth.reason}` });
     return;
   }
@@ -136,6 +154,7 @@ router.post("/tasks/:id/callback", async (req, res): Promise<void> => {
         ? `Task ${id} completed via callback`
         : `Task ${id} failed via callback: ${body.error ?? ""}`,
     metadata: { taskId: id },
+    audit,
   });
   broadcast({
     type: body.status === "completed" ? "task_completed" : "task_failed",

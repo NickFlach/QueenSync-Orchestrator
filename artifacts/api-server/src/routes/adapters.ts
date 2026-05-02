@@ -20,8 +20,16 @@ import { broadcast } from "../lib/ws";
 import { autoLocalResonance } from "../lib/resonance";
 import { dispatchTask } from "../lib/router";
 import { requireOperator } from "../lib/auth";
+import { getAuditContext, type AuditContext } from "../lib/audit";
+import { rateLimit } from "../middlewares/rate-limit";
 
 const router: IRouter = Router();
+
+const adapterPullLimiter = rateLimit({
+  name: "adapter-pull",
+  windowMs: 60_000,
+  max: 12,
+});
 
 let lastRadio: AdapterPullOut = {
   mode: "mock",
@@ -55,48 +63,56 @@ router.get("/adapters/radio/signals", async (_req, res): Promise<void> => {
   res.json(lastRadio.events);
 });
 
-router.post("/adapters/radio/pull", requireOperator, async (_req, res): Promise<void> => {
-  const result = await radioPullEvents();
-  lastRadio = result;
-  const conv = await convertEventsToSignalsAndResonance(
-    result.events,
-    "radio_transmission",
-    "radio.ninja-portal.com",
-    RADIO_BASE_TAGS,
-    "transmit",
-  );
-  await recordLog({
-    eventType: "adapter_pull",
-    source: "radio",
-    summary: `Pulled ${result.events.length} radio events (${result.mode}${result.stale ? ", stale" : ""})`,
-    metadata: {
+router.post(
+  "/adapters/radio/pull",
+  requireOperator,
+  adapterPullLimiter,
+  async (req, res): Promise<void> => {
+    const audit = getAuditContext(req);
+    const result = await radioPullEvents();
+    lastRadio = result;
+    const conv = await convertEventsToSignalsAndResonance(
+      result.events,
+      "radio_transmission",
+      "radio.ninja-portal.com",
+      RADIO_BASE_TAGS,
+      "transmit",
+      audit,
+    );
+    await recordLog({
+      eventType: "adapter_pull",
+      source: "radio",
+      summary: `Pulled ${result.events.length} radio events (${result.mode}${result.stale ? ", stale" : ""})`,
+      metadata: {
+        mode: result.mode,
+        stale: result.stale,
+        lastSuccessAt: result.lastSuccessAt,
+      },
+      audit,
+    });
+    broadcast({
+      type: "adapter_pull",
+      data: {
+        adapter: "radio",
+        mode: result.mode,
+        count: result.events.length,
+        stale: result.stale,
+        note: result.note,
+      },
+    });
+    res.json({
+      pulled: result.events.length,
       mode: result.mode,
+      signalIds: conv.signalIds,
+      resonanceIds: conv.resonanceIds,
+      taskIds: conv.taskIds,
       stale: result.stale,
       lastSuccessAt: result.lastSuccessAt,
-    },
-  });
-  broadcast({
-    type: "adapter_pull",
-    data: {
-      adapter: "radio",
-      mode: result.mode,
-      count: result.events.length,
-      stale: result.stale,
+      metricsSuppressed: result.metricsSuppressed,
       note: result.note,
-    },
-  });
-  res.json({
-    pulled: result.events.length,
-    mode: result.mode,
-    signalIds: conv.signalIds,
-    resonanceIds: conv.resonanceIds,
-    taskIds: conv.taskIds,
-    stale: result.stale,
-    lastSuccessAt: result.lastSuccessAt,
-    metricsSuppressed: result.metricsSuppressed,
-    note: result.note,
-  });
-});
+    });
+  },
+);
 
 router.get(
   "/adapters/observatory/health",
@@ -117,7 +133,9 @@ router.get(
 router.post(
   "/adapters/observatory/pull",
   requireOperator,
-  async (_req, res): Promise<void> => {
+  adapterPullLimiter,
+  async (req, res): Promise<void> => {
+    const audit = getAuditContext(req);
     const result = await observatoryPullEvents();
     lastObservatory = result;
     const conv = await convertEventsToSignalsAndResonance(
@@ -126,6 +144,7 @@ router.post(
       "observatory.ninja-portal.com",
       OBS_BASE_TAGS,
       "observe",
+      audit,
     );
     await recordLog({
       eventType: "adapter_pull",
@@ -137,6 +156,7 @@ router.post(
         metricsSuppressed: result.metricsSuppressed,
         lastSuccessAt: result.lastSuccessAt,
       },
+      audit,
     });
     broadcast({
       type: "adapter_pull",
@@ -169,6 +189,7 @@ async function convertEventsToSignalsAndResonance(
   source: string,
   baseTags: string[],
   capability: string,
+  audit: AuditContext,
 ): Promise<{ signalIds: string[]; resonanceIds: string[]; taskIds: string[] }> {
   const signalIds: string[] = [];
   const resonanceIds: string[] = [];
@@ -231,6 +252,7 @@ async function convertEventsToSignalsAndResonance(
       source,
       summary: `Resonance opened for adapter event: ${e.summary}`,
       metadata: { resonanceId: field.id, signalId: signal.id, taskId: task.id },
+      audit,
     });
     broadcast({
       type: "resonance_created",

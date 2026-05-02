@@ -7,6 +7,8 @@ import { attachAuth } from "./lib/auth";
 
 const app: Express = express();
 
+app.set("trust proxy", true);
+
 app.use(
   pinoHttp({
     logger,

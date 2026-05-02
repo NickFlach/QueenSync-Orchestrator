@@ -850,10 +850,18 @@ components:
             - dream_end
             - arm_presence_join
             - arm_presence_leave
+            - resonance_storm
+            - rate_limited
+            - callback_rejected
         source: { type: ["string", "null"] }
         summary: { type: string }
         metadata:
           type: object
+          description: |
+            Free-form audit + payload bag. Request-triggered entries always
+            include `actor` (identity, e.g. `admin:token`, `anon:browser`),
+            `ip` (client IP), and `trigger` (HTTP method + path) alongside
+            event-specific keys (taskIds, resonanceIds, decision, etc.).
           additionalProperties: true
         createdAt: { type: string, format: date-time }
 

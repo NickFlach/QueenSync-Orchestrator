@@ -455,10 +455,18 @@ export const ListLogsResponseItem = zod.object({
     "dream_end",
     "arm_presence_join",
     "arm_presence_leave",
+    "resonance_storm",
+    "rate_limited",
+    "callback_rejected",
   ]),
   source: zod.string().nullish(),
   summary: zod.string(),
-  metadata: zod.record(zod.string(), zod.unknown()).optional(),
+  metadata: zod
+    .record(zod.string(), zod.unknown())
+    .optional()
+    .describe(
+      "Free-form audit + payload bag. Request-triggered entries always\ninclude `actor` (identity, e.g. `admin:token`, `anon:browser`),\n`ip` (client IP), and `trigger` (HTTP method + path) alongside\nevent-specific keys (taskIds, resonanceIds, decision, etc.).\n",
+    ),
   createdAt: zod.coerce.date(),
 });
 export const ListLogsResponse = zod.array(ListLogsResponseItem);

@@ -30,4 +30,7 @@ export const LogEntryEventType = {
   dream_end: "dream_end",
   arm_presence_join: "arm_presence_join",
   arm_presence_leave: "arm_presence_leave",
+  resonance_storm: "resonance_storm",
+  rate_limited: "rate_limited",
+  callback_rejected: "callback_rejected",
 } as const;

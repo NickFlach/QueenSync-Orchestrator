@@ -443,8 +443,18 @@ export const LogEntryEventType = {
   dream_end: "dream_end",
   arm_presence_join: "arm_presence_join",
   arm_presence_leave: "arm_presence_leave",
+  resonance_storm: "resonance_storm",
+  rate_limited: "rate_limited",
+  callback_rejected: "callback_rejected",
 } as const;
 
+/**
+ * Free-form audit + payload bag. Request-triggered entries always
+include `actor` (identity, e.g. `admin:token`, `anon:browser`),
+`ip` (client IP), and `trigger` (HTTP method + path) alongside
+event-specific keys (taskIds, resonanceIds, decision, etc.).
+
+ */
 export type LogEntryMetadata = { [key: string]: unknown };
 
 export interface LogEntry {
@@ -453,6 +463,11 @@ export interface LogEntry {
   /** @nullable */
   source?: string | null;
   summary: string;
+  /** Free-form audit + payload bag. Request-triggered entries always
+include `actor` (identity, e.g. `admin:token`, `anon:browser`),
+`ip` (client IP), and `trigger` (HTTP method + path) alongside
+event-specific keys (taskIds, resonanceIds, decision, etc.).
+ */
   metadata?: LogEntryMetadata;
   createdAt: string;
 }

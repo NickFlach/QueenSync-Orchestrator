@@ -6,4 +6,11 @@
  * OpenAPI spec version: 0.2.0
  */
 
+/**
+ * Free-form audit + payload bag. Request-triggered entries always
+include `actor` (identity, e.g. `admin:token`, `anon:browser`),
+`ip` (client IP), and `trigger` (HTTP method + path) alongside
+event-specific keys (taskIds, resonanceIds, decision, etc.).
+
+ */
 export type LogEntryMetadata = { [key: string]: unknown };
