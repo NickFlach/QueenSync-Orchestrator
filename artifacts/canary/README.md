@@ -32,31 +32,97 @@ not overlap with Oracle Cloud's failure domains.
 
 | Env var                           | Default                                              | Purpose                                                                |
 | --------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------- |
-| `QUEENSYNC_CANARY_TARGET_URL`     | `https://console.ninja-portal.com/api/health`        | Endpoint to probe                                                      |
-| `QUEENSYNC_CANARY_ALERT_WEBHOOK`  | _(empty)_                                            | Slack/Discord/PagerDuty/etc webhook URL — required for alerts          |
-| `QUEENSYNC_CANARY_INTERVAL_MS`    | `60000`                                              | Probe interval                                                         |
-| `QUEENSYNC_CANARY_TIMEOUT_MS`     | `8000`                                               | Per-probe timeout                                                      |
-| `QUEENSYNC_CANARY_FAIL_AFTER`     | `2`                                                  | Consecutive failures before alerting                                   |
-| `QUEENSYNC_CANARY_SOURCE`         | `fly-canary`                                         | Identifier for the alerting source — set per region if running >1     |
-| `PORT`                            | `8080`                                               | Local health server port                                               |
+| `QUEENSYNC_CANARY_TARGET_URL`        | `https://console.ninja-portal.com/api/health` | Endpoint to probe                                                      |
+| `QUEENSYNC_CANARY_ALERT_WEBHOOK`     | _(empty)_                                     | Slack/Discord/PagerDuty/etc webhook URL — required for webhook alerts  |
+| `QUEENSYNC_CANARY_ALERT_FORMAT`      | `generic`                                     | One of `generic`, `slack`, `discord`, `pagerduty`                      |
+| `QUEENSYNC_CANARY_PAGERDUTY_KEY`     | _(empty)_                                     | PagerDuty Events API v2 routing key (required when format=`pagerduty`) |
+| `QUEENSYNC_CANARY_ALERT_EMAIL`       | _(empty)_                                     | Comma-separated recipient list for email alerts (via Resend)           |
+| `QUEENSYNC_CANARY_ALERT_EMAIL_FROM`  | `canary@queensync.dev`                        | `From:` address for email alerts (must be a verified Resend sender)    |
+| `RESEND_API_KEY`                     | _(empty)_                                     | Resend API key — required when `QUEENSYNC_CANARY_ALERT_EMAIL` is set   |
+| `QUEENSYNC_CANARY_INTERVAL_MS`       | `60000`                                       | Probe interval                                                         |
+| `QUEENSYNC_CANARY_TIMEOUT_MS`        | `8000`                                        | Per-probe timeout                                                      |
+| `QUEENSYNC_CANARY_FAIL_AFTER`        | `2`                                           | Consecutive failures before alerting                                   |
+| `QUEENSYNC_CANARY_SOURCE`            | `fly-canary`                                  | Identifier for the alerting source — set per region if running >1      |
+| `PORT`                               | `8080`                                        | Local health server port                                               |
 
-## Webhook payload shape
+## Alert formats
+
+Set `QUEENSYNC_CANARY_ALERT_FORMAT` to match the webhook receiver. The
+canary shapes the outgoing JSON automatically.
+
+### `generic` (default)
+
+Raw JSON — useful for n8n, Zapier, custom relays, or webhook.site.
 
 ```json
 {
   "source": "fly-canary",
   "target": "https://console.ninja-portal.com/api/health",
   "ts": "2026-05-02T18:32:11.014Z",
-  "kind": "down",            // or "recovery"
+  "kind": "down",
   "message": "QueenSync canary detected 2 consecutive failures from fly-canary: HTTP 502",
-  "consecutiveFailures": 2,  // present on "down"
-  "latencyMs": 184           // present on "recovery"
+  "consecutiveFailures": 2
 }
 ```
 
-Slack-compatible webhooks accept this JSON directly when the channel
-allows generic JSON inbound; for Slack incoming webhooks proper, wrap
-the alert in a `{ "text": "…" }` formatter (or use a small relay).
+```bash
+flyctl secrets set \
+  QUEENSYNC_CANARY_ALERT_FORMAT=generic \
+  QUEENSYNC_CANARY_ALERT_WEBHOOK="https://hooks.example.com/queensync"
+```
+
+### `slack`
+
+Targets [Slack incoming webhooks](https://api.slack.com/messaging/webhooks).
+Sends `{ "text": "...", "attachments": [...] }` with red/green colour by
+kind.
+
+```bash
+flyctl secrets set \
+  QUEENSYNC_CANARY_ALERT_FORMAT=slack \
+  QUEENSYNC_CANARY_ALERT_WEBHOOK="https://hooks.slack.com/services/T000/B000/XXXXXXXX"
+```
+
+### `discord`
+
+Targets [Discord webhooks](https://discord.com/developers/docs/resources/webhook#execute-webhook).
+Sends `{ "content": "...", "embeds": [...] }`.
+
+```bash
+flyctl secrets set \
+  QUEENSYNC_CANARY_ALERT_FORMAT=discord \
+  QUEENSYNC_CANARY_ALERT_WEBHOOK="https://discord.com/api/webhooks/123456/abcdef"
+```
+
+### `pagerduty`
+
+Targets the [PagerDuty Events API v2](https://developer.pagerduty.com/docs/events-api-v2/overview/).
+Down alerts `trigger`; recovery alerts `resolve` the same `dedup_key`
+(`queensync-canary-<source>`), so the incident closes itself.
+
+```bash
+flyctl secrets set \
+  QUEENSYNC_CANARY_ALERT_FORMAT=pagerduty \
+  QUEENSYNC_CANARY_ALERT_WEBHOOK="https://events.pagerduty.com/v2/enqueue" \
+  QUEENSYNC_CANARY_PAGERDUTY_KEY="your-32-char-integration-key"
+```
+
+## Email alerts (optional)
+
+Email is delivered through [Resend](https://resend.com). Set both the
+recipient list and a Resend API key — the canary will then send an email
+alongside whatever webhook is configured.
+
+```bash
+flyctl secrets set \
+  QUEENSYNC_CANARY_ALERT_EMAIL="ops@example.com,oncall@example.com" \
+  QUEENSYNC_CANARY_ALERT_EMAIL_FROM="canary@yourdomain.com" \
+  RESEND_API_KEY="re_xxxxxxxxxxxxxxxx"
+```
+
+The `From:` address must be a verified sender on your Resend account.
+Email and webhook delivery are independent: either, both, or neither
+can be configured.
 
 ## Deploy
 
