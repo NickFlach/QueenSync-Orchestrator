@@ -112,7 +112,7 @@ async function failTask(task: Task, arm: Arm, reason: string) {
     summary: `Task ${task.id} failed: ${reason}`,
     metadata: { taskId: task.id, armId: arm.id },
   });
-  broadcast({ type: "task_completed", data: failed });
+  broadcast({ type: "task_failed", data: failed });
   broadcast({ type: "arms_updated", data: { armId: arm.id, status: "idle" } });
 }
 

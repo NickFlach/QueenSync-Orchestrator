@@ -74,7 +74,7 @@ export async function autoLocalResonance(field: ResonanceField) {
   );
   for (const arm of candidates) {
     const score = computeArmScore(arm, field);
-    if (score < 0.5 && score < arm.resonanceSensitivity) continue;
+    if (score < 0.5 || score < arm.resonanceSensitivity) continue;
     const output = `${arm.name} resonates with "${field.intent}" via tags [${arm.resonanceTags.join(", ")}].`;
     const [response] = await db
       .insert(resonanceResponsesTable)
