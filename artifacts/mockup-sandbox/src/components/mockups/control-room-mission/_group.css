@@ -1,0 +1,85 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Share+Tech+Mono&display=swap');
+
+.mc-theme {
+  --color-bg-base: #05010d;
+  --color-bg-panel: #0a0415;
+  --color-border: #1e1b4b;
+  --color-primary: #6366f1;
+  --color-primary-glow: rgba(99, 102, 241, 0.4);
+  --color-accent: #f59e0b; /* amber for armed/live */
+  --color-terminal: #10b981; /* green */
+  --color-text-main: #c7d2fe;
+  --color-text-muted: #6366f1;
+  font-family: 'JetBrains Mono', monospace;
+  background-color: var(--color-bg-base);
+  color: var(--color-text-main);
+}
+
+.mc-scanlines {
+  background: linear-gradient(
+    to bottom,
+    rgba(255,255,255,0),
+    rgba(255,255,255,0) 50%,
+    rgba(0,0,0,0.15) 50%,
+    rgba(0,0,0,0.15)
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+}
+
+.mc-grid-bg {
+  background-image: 
+    linear-gradient(to right, rgba(99, 102, 241, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(99, 102, 241, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.mc-bracket-tl, .mc-bracket-tr, .mc-bracket-bl, .mc-bracket-br {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: #6366f1;
+  border-style: solid;
+  pointer-events: none;
+  z-index: 10;
+}
+.mc-bracket-tl { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+.mc-bracket-tr { top: -1px; right: -1px; border-width: 2px 2px 0 0; }
+.mc-bracket-bl { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; }
+.mc-bracket-br { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+.mc-glass-panel {
+  background: rgba(10, 4, 21, 0.75);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border);
+}
+
+.mc-pulse {
+  animation: mc-pulse-anim 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes mc-pulse-anim {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .5; }
+}
+
+.mc-monitor-frame {
+  background: #0a0415;
+  box-shadow: inset 0 0 30px rgba(0,0,0,0.9), 0 0 0 1px #1e1b4b, 0 0 0 4px #05010d, 0 0 0 5px #1e1b4b;
+  position: relative;
+}
+
+.mc-monitor-glare {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 40%);
+  pointer-events: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}

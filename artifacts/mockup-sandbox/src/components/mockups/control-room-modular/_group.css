@@ -1,0 +1,149 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700&display=swap');
+
+:root {
+  --control-bg: #0a0118;
+  --control-bg-panel: rgba(17, 4, 37, 0.8);
+  --control-primary: #6366f1;
+  --control-primary-glow: rgba(99, 102, 241, 0.4);
+  --control-accent: #7c3aed;
+  --control-terminal-green: #10b981;
+  --control-terminal-amber: #f59e0b;
+  --control-text: #e2e8f0;
+  --control-text-muted: #94a3b8;
+  --control-border: rgba(99, 102, 241, 0.2);
+}
+
+.font-cyber {
+  font-family: 'Orbitron', sans-serif;
+}
+
+.font-mono-cyber {
+  font-family: 'Fira Code', monospace;
+}
+
+.scanlines {
+  position: relative;
+  overflow: hidden;
+}
+
+.scanlines::before {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(255,255,255,0),
+    rgba(255,255,255,0) 50%,
+    rgba(0,0,0,0.2) 50%,
+    rgba(0,0,0,0.2)
+  );
+  background-size: 100% 4px;
+  z-index: 50;
+  pointer-events: none;
+  opacity: 0.3;
+}
+
+.grid-bg {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(99, 102, 241, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(99, 102, 241, 0.05) 1px, transparent 1px);
+}
+
+.glass-panel {
+  background: var(--control-bg-panel);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--control-border);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.glass-panel-active {
+  border-color: var(--control-primary);
+  box-shadow: 0 0 15px var(--control-primary-glow), inset 0 0 0 1px rgba(99, 102, 241, 0.2);
+}
+
+.terminal-text {
+  text-shadow: 0 0 5px rgba(226, 232, 240, 0.5);
+}
+
+.terminal-green-glow {
+  color: var(--control-terminal-green);
+  text-shadow: 0 0 5px rgba(16, 185, 129, 0.5);
+}
+
+.terminal-amber-glow {
+  color: var(--control-terminal-amber);
+  text-shadow: 0 0 5px rgba(245, 158, 11, 0.5);
+}
+
+.cyber-button {
+  background: transparent;
+  border: 1px solid var(--control-border);
+  color: var(--control-text);
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.cyber-button:hover {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: var(--control-primary);
+  color: #fff;
+  box-shadow: 0 0 10px var(--control-primary-glow);
+}
+
+.cyber-button::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+  transform: skewX(-20deg);
+  transition: 0.5s;
+}
+
+.cyber-button:hover::after {
+  left: 150%;
+}
+
+.blinking-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 1em;
+  background-color: var(--control-primary);
+  animation: blink 1s step-end infinite;
+  vertical-align: middle;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.tile-ghost {
+  border: 1px dashed var(--control-primary);
+  background: rgba(99, 102, 241, 0.05);
+  opacity: 0.5;
+}
+
+/* Custom Scrollbar for panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--control-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--control-primary);
+}
