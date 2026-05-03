@@ -1,0 +1,14 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "fV1Df8QF6JgwRyHfZXPQr"
+uri = "file://kannaktopus-observatory-presence.tar.gz"
+type = "unspecified"
+title = "Kannaktopus PR bundle (tar.gz)"
+
+[[outputs]]
+id = "WfFuy9nncsjXSOzsp8WYV"
+uri = "file://KANNAKTOPUS_PR_BODY.md"
+type = "text"
+title = "PR description"
