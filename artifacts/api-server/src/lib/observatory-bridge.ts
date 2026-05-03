@@ -1,5 +1,7 @@
 import { logger } from "./logger";
 import { safeFetch, BlockedUrlError } from "./safe-fetch";
+import { SUBJECTS } from "@workspace/nats";
+import { getNatsClient } from "./nats-bridge";
 
 const OBSERVATORY_BASE_URL =
   process.env["OBSERVATORY_BASE_URL"] ??
@@ -9,6 +11,44 @@ const KANNAKTOPUS_WAKE_URL =
   process.env["KANNAKTOPUS_WAKE_URL"] ?? "";
 
 const KANNAKTOPUS_API_KEY = process.env["KANNAKTOPUS_API_KEY"] ?? "";
+
+/**
+ * Detect a NATS-transport wake URL like `nats://host:4222[/<subject>]` (or
+ * `nats+tls://...`). Returns the subject to publish on, or null if the
+ * URL is not a NATS URL. The pathname (minus leading slash) overrides the
+ * default `KANNAKA.wake` subject so operators can swap channels per-env.
+ */
+function parseNatsWakeUrl(url: string): { subject: string } | null {
+  if (!url) return null;
+  // Tolerate stray whitespace operators sometimes paste into env values.
+  const trimmed = url.trim();
+  if (!/^nats(\+tls)?:\/\//i.test(trimmed)) return null;
+  let parsed: URL;
+  try {
+    // The WHATWG URL parser doesn't know about `nats:`; rewrite to `http:`
+    // just to crack the pieces apart, then take pathname.
+    parsed = new URL(trimmed.replace(/^nats(\+tls)?:\/\//i, "http://"));
+  } catch {
+    // Don't silently default — surface the misconfig so operators see it.
+    logger.warn(
+      { url: trimmed },
+      "KANNAKTOPUS_WAKE_URL looks like a nats:// URL but failed to parse",
+    );
+    return null;
+  }
+  const pathSubject = parsed.pathname.replace(/^\/+/, "").trim();
+  // Subject token validation: NATS subjects allow letters/digits/`._-*>` and
+  // disallow whitespace. Anything weirder is rejected so we don't publish to
+  // a malformed subject (which the server would reject anyway).
+  if (pathSubject.length > 0 && !/^[A-Za-z0-9_.\-*>]+$/.test(pathSubject)) {
+    logger.warn(
+      { url: trimmed, pathSubject },
+      "KANNAKTOPUS_WAKE_URL path is not a valid NATS subject; falling back to default",
+    );
+    return { subject: SUBJECTS.KANNAKTOPUS_WAKE };
+  }
+  return { subject: pathSubject.length > 0 ? pathSubject : SUBJECTS.KANNAKTOPUS_WAKE };
+}
 
 export interface ConsciousnessSnapshot {
   level: string;
@@ -194,6 +234,64 @@ export async function pokeKannaktopusWake(payload: {
         "KANNAKTOPUS_WAKE_URL not configured — wake signal logged locally only",
     };
   }
+
+  // ── NATS transport ──────────────────────────────────────────────────────
+  // If KANNAKTOPUS_WAKE_URL is a `nats://` (or `nats+tls://`) URL, publish
+  // the wake message on NATS instead of POSTing HTTP. We piggy-back on the
+  // existing connection from `startNatsBridge()` so we don't open a second
+  // socket — operators only configure one NATS_URL.
+  const natsTarget = parseNatsWakeUrl(KANNAKTOPUS_WAKE_URL);
+  if (natsTarget) {
+    const client = getNatsClient();
+    if (!client) {
+      return {
+        attempted: false,
+        ok: false,
+        status: null,
+        endpoint: KANNAKTOPUS_WAKE_URL,
+        message:
+          "NATS bridge not started — cannot publish wake signal yet (server is still booting?)",
+      };
+    }
+    const status = client.status();
+    if (status.state !== "connected") {
+      return {
+        attempted: true,
+        ok: false,
+        status: null,
+        endpoint: KANNAKTOPUS_WAKE_URL,
+        message: `NATS not connected (state=${status.state}) — wake signal not published`,
+      };
+    }
+    try {
+      client.publish(natsTarget.subject, {
+        action: "wake",
+        source: payload.source,
+        taskIds: payload.taskIds,
+        ts: new Date().toISOString(),
+      });
+      return {
+        attempted: true,
+        ok: true,
+        status: 200,
+        endpoint: `nats:${natsTarget.subject}`,
+        message: `Kannaktopus wake published on NATS subject ${natsTarget.subject}`,
+      };
+    } catch (err) {
+      logger.warn({ err, subject: natsTarget.subject }, "kannaktopus wake nats publish failed");
+      return {
+        attempted: true,
+        ok: false,
+        status: null,
+        endpoint: `nats:${natsTarget.subject}`,
+        message: `Kannaktopus wake NATS publish failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      };
+    }
+  }
+
+  // ── HTTP transport (default) ────────────────────────────────────────────
   try {
     const headers: Record<string, string> = {
       "content-type": "application/json",
@@ -245,9 +343,16 @@ export async function pokeKannaktopusWake(payload: {
 }
 
 export function observatoryBridgeConfig() {
+  const natsTarget = parseNatsWakeUrl(KANNAKTOPUS_WAKE_URL);
   return {
     observatoryBaseUrl: OBSERVATORY_BASE_URL,
     kannaktopusWakeConfigured: Boolean(KANNAKTOPUS_WAKE_URL),
     kannaktopusWakeUrl: KANNAKTOPUS_WAKE_URL || null,
+    kannaktopusWakeTransport: KANNAKTOPUS_WAKE_URL
+      ? natsTarget
+        ? "nats"
+        : "http"
+      : null,
+    kannaktopusWakeNatsSubject: natsTarget?.subject ?? null,
   };
 }
