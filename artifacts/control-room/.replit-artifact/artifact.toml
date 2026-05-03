@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/control-room/"
+title = "QueenSync Control Room"
+version = "1.0.0"
+id = "artifacts/control-room"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/control-room/" ]
+localPort = 26000
+
+[services.development]
+run = "pnpm --filter @workspace/control-room run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/control-room", "run", "build" ]
+publicDir = "artifacts/control-room/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "26000"
+BASE_PATH = "/control-room/"

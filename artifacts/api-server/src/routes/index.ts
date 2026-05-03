@@ -11,6 +11,7 @@ import adaptersRouter from "./adapters";
 import observatoryRouter from "./observatory";
 import resonanceRouter from "./resonance";
 import demoRouter from "./demo";
+import aiRouter from "./ai";
 import { requireViewer } from "../lib/auth";
 
 const router: IRouter = Router();
@@ -32,5 +33,6 @@ router.use(requireViewer, adaptersRouter);
 router.use(requireViewer, observatoryRouter);
 router.use(requireViewer, resonanceRouter);
 router.use(requireViewer, demoRouter);
+router.use(requireViewer, aiRouter);
 
 export default router;

@@ -4,7 +4,7 @@
 
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
 
-Currently hosts **QueenSync** — an agent orchestration + Resonance Control Protocol (RCP) plane for the Kannaka ecosystem. Frontend artifact `queensync` (dark "Queen Console" UI), backend `api-server` (Express + WebSocket on `/ws`), Postgres via Drizzle.
+Currently hosts **QueenSync** — an agent orchestration + Resonance Control Protocol (RCP) plane for the Kannaka ecosystem. Frontend artifact `queensync` (dark "Queen Console" UI), backend `api-server` (Express + WebSocket on `/ws`), Postgres via Drizzle. Second frontend `control-room` (cyberpunk "Terminal Wall" multi-monitor dashboard with replit-ai command bar).
 
 ## QueenSync architecture
 
@@ -40,6 +40,17 @@ The frontend (`artifacts/queensync`) gates the entire app behind `<AuthProvider>
 - `POST /api/arms` accepts optional `secret`; auto-generates one when `authMethod !== "none"` and storage is enabled. Plaintext returned exactly once as `oneTimeSecret`.
 - `POST /api/arms/:id/rotate-credential` mints a new secret and returns it once. Old secret is invalid immediately.
 - `lib/router.ts:dispatchExternal` and `lib/auth.ts:verifyCallbackAuth` prefer per-arm secret, fall back to shared `QUEENSYNC_API_KEY` / `QUEENSYNC_CALLBACK_SECRET` for arms not yet migrated.
+
+## QueenSync Control Room artifact
+
+`artifacts/control-room/` (slug `control-room`, port 26000) is a separate React+Vite SPA implementing the "Terminal Wall" mockup — a user-arrangeable grid of hologram-style monitor tiles over the same `/api` surface, with a bottom command bar that accepts slash commands AND free-form natural language.
+
+- Layout state in `src/hooks/use-layout.ts` persisted to `localStorage` key `queensync.control-room.layout.v1`. Add/remove/move/resize via `src/components/{add-monitor-dialog,monitor-shell}.tsx`.
+- Monitor kinds in `src/lib/monitor-types.ts` (radio-hologram, observatory, logs, arms, resonance, tasks, signals, memory-stream, hrm-stats, adapters, iframe). Renderer in `src/components/monitors/monitor-renderer.tsx`.
+- API helper `src/lib/api.ts` exposes `asArray<T>(data, key?)` to normalise both raw-array and `{items}` envelope responses — every monitor uses it because backend routes return raw arrays.
+- Command bar `src/components/command-bar.tsx` handles slash commands locally (`/arms`, `/tasks`, `/summary`, `/wake`, `/dream`, `/storm`, `/add`, `/remove`, `/clear`, `/help`, etc.). Free-form text → `POST /api/ai/command` which uses gpt-5-mini via the Replit OpenAI integration (`AI_INTEGRATIONS_OPENAI_BASE_URL` + `AI_INTEGRATIONS_OPENAI_API_KEY`) to choose a tool, then dispatches the same way slash commands do.
+- Backend AI route: `artifacts/api-server/src/lib/ai-command.ts` (intent parser, JSON-only response_format) + `artifacts/api-server/src/routes/ai.ts` (`GET /api/ai/status`, `POST /api/ai/command`). Mounted under `requireViewer`.
+- Mutating `/api/demo/*` calls (wake/dream/storm) require operator auth — the command bar surfaces `✕ authentication required` when called without a session.
 
 ## QueenSync log export (Wave 5)
 
