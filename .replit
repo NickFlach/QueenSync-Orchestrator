@@ -47,5 +47,10 @@ QUEENSYNC_SESSION_SECRET = "test-session-secret-do-not-use-in-prod-12345678"
 
 [userenv.shared]
 
+[userenv.production]
+QUEENSYNC_OPERATOR_TOKEN = "saintnick"
+QUEENSYNC_VIEWER_TOKEN = "saintnick"
+QUEENSYNC_SESSION_SECRET = "saintnick"
+
 [nix]
 channel = "stable-25_05"
