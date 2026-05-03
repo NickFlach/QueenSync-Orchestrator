@@ -33,7 +33,7 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function TasksRouter() {
   const { data: tasks, isLoading } = useListTasks({
-    query: { refetchInterval: 6000, queryKey: getListTasksQueryKey() },
+    query: { refetchInterval: 20000, queryKey: getListTasksQueryKey() },
   });
   const queryClient = useQueryClient();
   const { toast } = useToast();

@@ -40,7 +40,7 @@ export default function Hologram() {
     error: stateErrObj,
   } = useGetObservatoryState({
     query: {
-      refetchInterval: 5000,
+      refetchInterval: 20000,
       queryKey: getGetObservatoryStateQueryKey(),
     },
   });

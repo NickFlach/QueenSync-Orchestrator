@@ -31,13 +31,13 @@ import { useToast } from "@/hooks/use-toast";
 export default function Overview() {
   const { data: summary, isLoading } = useGetSystemSummary({
     query: {
-      refetchInterval: 8000,
+      refetchInterval: 30000,
       queryKey: getGetSystemSummaryQueryKey(),
     },
   });
   const { data: activeResonance } = useListActiveResonance({
     query: {
-      refetchInterval: 8000,
+      refetchInterval: 30000,
       queryKey: getListActiveResonanceQueryKey(),
     },
   });

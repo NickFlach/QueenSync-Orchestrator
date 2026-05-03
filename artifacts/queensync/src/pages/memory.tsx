@@ -576,7 +576,7 @@ export default function MemoryGate() {
   const healthQueryKey = getHealthCheckQueryKey();
 
   const { data: health } = useHealthCheck({
-    query: { refetchInterval: 5000, queryKey: healthQueryKey },
+    query: { refetchInterval: 20000, queryKey: healthQueryKey },
   });
   const natsState: NatsStatusState | null = health?.nats?.state ?? null;
   const natsReason: string | null =
@@ -655,16 +655,16 @@ export default function MemoryGate() {
 
   const { data: memory, isLoading } = useListMemory(
     { includeCompacted, includeRejected },
-    { query: { refetchInterval: 5000, queryKey: memoryQueryKey } },
+    { query: { refetchInterval: 20000, queryKey: memoryQueryKey } },
   );
 
   const { data: exemplars } = useListMemory(
     { inboundExemplarsOnly: true },
-    { query: { refetchInterval: 5000, queryKey: exemplarQueryKey } },
+    { query: { refetchInterval: 20000, queryKey: exemplarQueryKey } },
   );
 
   const { data: stats } = useGetExemplarStats({
-    query: { refetchInterval: 5000, queryKey: statsQueryKey },
+    query: { refetchInterval: 20000, queryKey: statsQueryKey },
   });
 
   const invalidate = () => {

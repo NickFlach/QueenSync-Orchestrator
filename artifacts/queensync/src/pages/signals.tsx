@@ -125,19 +125,19 @@ function AdapterStatusBadges({
 export default function SignalsIngestion() {
   const { data: signals, isLoading } = useListSignals({
     query: {
-      refetchInterval: 8000,
+      refetchInterval: 30000,
       queryKey: getListSignalsQueryKey(),
     },
   });
   const { data: radioHealth } = useRadioAdapterHealth({
     query: {
-      refetchInterval: 10000,
+      refetchInterval: 30000,
       queryKey: getRadioAdapterHealthQueryKey(),
     },
   });
   const { data: obsHealth } = useObservatoryAdapterHealth({
     query: {
-      refetchInterval: 10000,
+      refetchInterval: 30000,
       queryKey: getObservatoryAdapterHealthQueryKey(),
     },
   });

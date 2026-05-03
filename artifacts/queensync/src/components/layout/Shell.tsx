@@ -45,7 +45,7 @@ export function Shell({ children }: ShellProps) {
   const [location] = useLocation();
   const { data: health, isError } = useHealthCheck({
     query: {
-      refetchInterval: 10000,
+      refetchInterval: 30000,
       queryKey: getHealthCheckQueryKey(),
     },
   });

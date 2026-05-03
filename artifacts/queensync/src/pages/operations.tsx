@@ -51,7 +51,7 @@ export default function Operations() {
   const isOperator = session?.role === "operator";
   const { data: dispatches, isLoading } = useListPrivilegedDispatches({
     query: {
-      refetchInterval: 4000,
+      refetchInterval: 15000,
       queryKey: getListPrivilegedDispatchesQueryKey(),
     },
   });
@@ -59,7 +59,7 @@ export default function Operations() {
     RECENT_STATS_PARAMS,
     {
       query: {
-        refetchInterval: 4000,
+        refetchInterval: 15000,
         queryKey: getPrivilegedDispatchRecentStatsQueryKey(RECENT_STATS_PARAMS),
       },
     },

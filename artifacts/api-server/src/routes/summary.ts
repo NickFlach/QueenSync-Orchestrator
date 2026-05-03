@@ -15,34 +15,79 @@ const router: IRouter = Router();
 
 router.get("/summary", async (_req, res): Promise<void> => {
   const since = new Date(Date.now() - 1000 * 60 * 60);
-  const arms = await db.select().from(armsTable);
-  const activeArms = arms.filter(
-    (a) => a.status === "idle" || a.status === "busy",
-  ).length;
-  const tasks = await db.select().from(tasksTable);
-  const queuedTasks = tasks.filter(
-    (t) => t.status === "pending" || t.status === "active",
-  ).length;
-  const completedTasks = tasks.filter((t) => t.status === "completed").length;
-  const failedTasks = tasks.filter((t) => t.status === "failed").length;
-  const memApprovals = await db
+
+  // Aggregate arm counts in SQL instead of pulling every row and filtering
+  // in JS. Same for tasks. Then fan out every read in parallel — previously
+  // the handler ran 6 sequential queries plus 2 health checks.
+  const armsByStatusP = db
+    .select({
+      status: armsTable.status,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(armsTable)
+    .groupBy(armsTable.status);
+
+  const tasksByStatusP = db
+    .select({
+      status: tasksTable.status,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(tasksTable)
+    .groupBy(tasksTable.status);
+
+  const memApprovalsP = db
     .select({ count: sql<number>`count(*)::int` })
     .from(memoryEventsTable)
     .where(eq(memoryEventsTable.decision, "approved"));
-  const recentSignals = await db
+
+  const recentSignalsP = db
     .select({ count: sql<number>`count(*)::int` })
     .from(signalsTable)
     .where(gte(signalsTable.createdAt, since));
-  const activeRes = await db
+
+  const activeResP = db
     .select({ count: sql<number>`count(*)::int` })
     .from(resonanceFieldsTable)
     .where(eq(resonanceFieldsTable.status, "active"));
 
-  const [radio, obs] = await Promise.all([radioHealth(), observatoryHealth()]);
+  const [
+    armsByStatus,
+    tasksByStatus,
+    memApprovals,
+    recentSignals,
+    activeRes,
+    radio,
+    obs,
+  ] = await Promise.all([
+    armsByStatusP,
+    tasksByStatusP,
+    memApprovalsP,
+    recentSignalsP,
+    activeResP,
+    radioHealth(),
+    observatoryHealth(),
+  ]);
+
+  let activeArms = 0;
+  let totalArms = 0;
+  for (const row of armsByStatus) {
+    totalArms += row.count;
+    if (row.status === "idle" || row.status === "busy") activeArms += row.count;
+  }
+
+  let queuedTasks = 0;
+  let completedTasks = 0;
+  let failedTasks = 0;
+  for (const row of tasksByStatus) {
+    if (row.status === "pending" || row.status === "active")
+      queuedTasks += row.count;
+    else if (row.status === "completed") completedTasks = row.count;
+    else if (row.status === "failed") failedTasks = row.count;
+  }
 
   res.json({
     activeArms,
-    totalArms: arms.length,
+    totalArms,
     queuedTasks,
     completedTasks,
     failedTasks,

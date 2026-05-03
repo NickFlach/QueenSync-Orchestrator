@@ -12,6 +12,7 @@ import {
   getGetObservatoryStateQueryKey,
   getGetObservatoryConfigQueryKey,
   getHealthCheckQueryKey,
+  getGetExemplarStatsQueryKey,
 } from "@workspace/api-client-react";
 
 export type WsStatus = "idle" | "connecting" | "open" | "closed";
@@ -26,7 +27,16 @@ const EVENT_TO_KEYS: Record<string, (() => readonly unknown[])[]> = {
   task_failed: [getListTasksQueryKey, getGetSystemSummaryQueryKey],
   task_updated: [getListTasksQueryKey, getGetSystemSummaryQueryKey],
   signal_received: [getListSignalsQueryKey, getGetSystemSummaryQueryKey],
-  memory_event: [getListMemoryQueryKey, getGetSystemSummaryQueryKey],
+  memory_event: [
+    getListMemoryQueryKey,
+    getGetExemplarStatsQueryKey,
+    getGetSystemSummaryQueryKey,
+  ],
+  memory_compacted: [
+    getListMemoryQueryKey,
+    getGetExemplarStatsQueryKey,
+    getGetSystemSummaryQueryKey,
+  ],
   log_event: [getListLogsQueryKey],
   resonance_created: [
     getListResonanceQueryKey,

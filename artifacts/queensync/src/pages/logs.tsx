@@ -16,7 +16,7 @@ import {
 
 export default function ExecutionLog() {
   const { data: logs, isLoading } = useListLogs({
-    query: { refetchInterval: 3000, queryKey: getListLogsQueryKey() },
+    query: { refetchInterval: 10000, queryKey: getListLogsQueryKey() },
   });
 
   const allLogs = (logs ?? []) as LogEntry[];

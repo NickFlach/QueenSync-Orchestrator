@@ -120,7 +120,7 @@ const AUTH_METHODS: OnboardArmBodyAuthMethod[] = [
 
 export default function ArmsRegistry() {
   const { data: arms, isLoading } = useListArms({
-    query: { refetchInterval: 8000, queryKey: getListArmsQueryKey() },
+    query: { refetchInterval: 30000, queryKey: getListArmsQueryKey() },
   });
   const queryClient = useQueryClient();
   const { toast } = useToast();

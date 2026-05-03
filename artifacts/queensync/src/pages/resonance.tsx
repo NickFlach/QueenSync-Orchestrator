@@ -36,7 +36,7 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function ResonanceFields() {
   const { data: resonance, isLoading } = useListResonance({
-    query: { refetchInterval: 8000, queryKey: getListResonanceQueryKey() },
+    query: { refetchInterval: 30000, queryKey: getListResonanceQueryKey() },
   });
   const queryClient = useQueryClient();
   const { toast } = useToast();
