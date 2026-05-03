@@ -23,9 +23,16 @@ import {
 } from "lucide-react";
 
 const HOLOGRAM_URL = "https://radio.ninja-portal.com/video/hologram";
+const GHOST_URL = "https://radio.ninja-portal.com/video/ghost";
+const CONSTELLATION_URL = "https://radio.ninja-portal.com/video/constellation";
 const OBSERVATORY_URL = "https://observatory.ninja-portal.com";
 
-type ViewMode = "split" | "hologram" | "observatory";
+type ViewMode =
+  | "split"
+  | "hologram"
+  | "ghost"
+  | "constellation"
+  | "observatory";
 
 export default function Hologram() {
   const queryClient = useQueryClient();
@@ -119,7 +126,15 @@ export default function Hologram() {
         </div>
         <div className="flex items-center gap-2">
           <div className="flex border border-border/50 rounded-sm overflow-hidden">
-            {(["split", "hologram", "observatory"] as ViewMode[]).map((v) => (
+            {(
+              [
+                "split",
+                "hologram",
+                "ghost",
+                "constellation",
+                "observatory",
+              ] as ViewMode[]
+            ).map((v) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
@@ -242,6 +257,28 @@ export default function Hologram() {
             iframeKey={iframeKey}
             badge={state?.currentTrack?.title ?? null}
             badgeSub={state?.currentTrack?.album ?? null}
+          />
+        )}
+        {(view === "split" || view === "ghost") && (
+          <TVPanel
+            title="Radio Ghost"
+            href={GHOST_URL}
+            src={GHOST_URL}
+            iframeKey={iframeKey}
+            badge={state?.currentTrack?.title ?? null}
+            badgeSub="ghost · live"
+            badgeAccent="text-fuchsia-300"
+          />
+        )}
+        {(view === "split" || view === "constellation") && (
+          <TVPanel
+            title="Constellation Visualizer"
+            href={CONSTELLATION_URL}
+            src={CONSTELLATION_URL}
+            iframeKey={iframeKey}
+            badge={`${queen?.agentCount ?? 0} agents`}
+            badgeSub="constellation · live"
+            badgeAccent="text-emerald-300"
           />
         )}
         {(view === "split" || view === "observatory") && (
