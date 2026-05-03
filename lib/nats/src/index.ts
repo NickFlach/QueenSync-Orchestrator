@@ -42,15 +42,13 @@ export const SUBJECTS = {
    * subscription so we capture every agent's phase update.
    */
   QUEEN_PHASE: "QUEEN.phase.*",
-  /** Prefix for REQ/REPLY arm pings: KANNAKA.ask.<armId> */
-  ASK_PREFIX: "KANNAKA.ask",
   /**
-   * Outbound wake nudge to Kannaktopus. Published by `pokeKannaktopusWake`
-   * when `KANNAKTOPUS_WAKE_URL` is configured with a `nats://` URL. The
-   * subject can be overridden by appending a path to the URL, e.g.
-   * `nats://host:4222/KANNAKA.wake.staging`.
+   * Prefix for REQ/REPLY arm commands: `KANNAKA.ask.<armId>`. Per the
+   * Kannaktopus control-panel-api contract, every arm subscribes here and
+   * answers commands like `{cmd:"wake"}`, `{cmd:"ping"}`, `{cmd:"status"}`,
+   * etc. with a synchronous reply.
    */
-  KANNAKTOPUS_WAKE: "KANNAKA.wake",
+  ASK_PREFIX: "KANNAKA.ask",
 } as const;
 
 export const ALL_SUBSCRIBE_SUBJECTS: readonly string[] = [
